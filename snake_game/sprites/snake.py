@@ -1,9 +1,15 @@
 import pygame
+import math
 
 class Snake:
     def __init__(self, x, y, block_size=20):
         self.block_size = block_size
         self.reset(x, y)
+        self.is_dead = False
+        self.death_timer = 0
+        self.death_frame = 0
+        self.death_frames = 30  # How long to show death animation
+        self.color = (0, 255, 0)  # Add default color
         
     def reset(self, x, y):
         self.x = x
@@ -13,6 +19,9 @@ class Snake:
         self.body = []
         self.length = 1
         self.wall_bounce_cooldown = 0
+        self.is_dead = False  # Reset death state
+        self.death_timer = 0  # Reset death animation timer
+        self.death_frame = 0  # Reset death animation frame
         
     def handle_input(self, event):
         if event.type == pygame.KEYDOWN:
@@ -68,23 +77,94 @@ class Snake:
         self.wall_bounce_cooldown = 3
     
     def draw(self, surface):
-        # Draw snake body segments with pixel-art style
-        for segment in self.body:
-            block = self.block_size // 4
-            for i in range(4):
-                for j in range(4):
-                    color = (0, 200, 0) if (i == 3 or j == 3) else (0, 255, 0)
-                    pygame.draw.rect(surface, color,
-                                   [segment[0] + (j * block),
-                                    segment[1] + (i * block),
-                                    block, block])
-        
-        # Draw eyes
-        if self.body:
-            head = self.body[-1]
-            self._draw_eyes(surface, head)
+        if not self.is_dead:
+            # Draw snake body segments with pixel-art style
+            for segment in self.body:
+                # Draw each segment as 4x4 pixel blocks for retro look
+                block = self.block_size // 4
+                for i in range(4):
+                    for j in range(4):
+                        # Create shading pattern: darker on bottom/right edges
+                        color = (0, 200, 0) if (i == 3 or j == 3) else (0, 255, 0)
+                        pygame.draw.rect(surface, color,
+                                       [segment[0] + (j * block),
+                                        segment[1] + (i * block),
+                                        block, block])
+            # Draw eyes on head
+            if self.body:
+                self._draw_eyes(surface)
+        else:
+            # Death animation
+            self.death_timer += 1
+            progress = self.death_timer / self.death_frames
+            
+            # Draw each segment with X eyes and falling apart
+            for i, segment in enumerate(self.body):
+                # Make segments fall with different timing
+                fall_offset = int(progress * 50 * (i + 1))
+                
+                # Draw segment as "bones" with pixelated style
+                segment_rect = pygame.Rect(segment[0], segment[1] + fall_offset,
+                                         self.block_size, self.block_size)
+                
+                # Draw each bone segment in pixel art style
+                block = self.block_size // 4
+                for bi in range(4):
+                    for bj in range(4):
+                        # Create bone pattern
+                        is_edge = bi == 0 or bi == 3 or bj == 0 or bj == 3
+                        color = (200, 200, 200) if is_edge else (255, 255, 255)
+                        pygame.draw.rect(surface, color,
+                                       [segment_rect.x + (bj * block),
+                                        segment_rect.y + (bi * block),
+                                        block, block])
+                
+                # Add cross pattern for "bones" effect on body segments
+                if i > 0:  # Not for head
+                    pygame.draw.line(surface, (150, 150, 150),
+                                   (segment_rect.left + 4, segment_rect.centery),
+                                   (segment_rect.right - 4, segment_rect.centery), 2)
+                    pygame.draw.line(surface, (150, 150, 150),
+                                   (segment_rect.centerx, segment_rect.top + 4),
+                                   (segment_rect.centerx, segment_rect.bottom - 4), 2)
+            
+            # Draw googly X eyes on head
+            if self.body:
+                head = self.body[0]
+                head_rect = pygame.Rect(head[0], head[1] + int(progress * 50),
+                                      self.block_size, self.block_size)
+                
+                # Draw bigger, more cartoonish X eyes
+                eye_size = 5
+                eye_thickness = 3
+                wobble = math.sin(self.death_timer * 0.5) * 2  # Add wobble effect
+                
+                left_eye_pos = (head_rect.left + self.block_size // 4,
+                               head_rect.top + self.block_size // 3 + wobble)
+                right_eye_pos = (head_rect.right - self.block_size // 4,
+                               head_rect.top + self.block_size // 3 - wobble)
+                
+                # Draw white circles behind X's for more cartoon look
+                for eye_pos in [left_eye_pos, right_eye_pos]:
+                    pygame.draw.circle(surface, (255, 255, 255),
+                                     (eye_pos[0], eye_pos[1]), eye_size + 2)
+                
+                # Draw X's with thicker lines
+                for eye_pos in [left_eye_pos, right_eye_pos]:
+                    pygame.draw.line(surface, (0, 0, 0),
+                                   (eye_pos[0] - eye_size, eye_pos[1] - eye_size),
+                                   (eye_pos[0] + eye_size, eye_pos[1] + eye_size),
+                                   eye_thickness)
+                    pygame.draw.line(surface, (0, 0, 0),
+                                   (eye_pos[0] - eye_size, eye_pos[1] + eye_size),
+                                   (eye_pos[0] + eye_size, eye_pos[1] - eye_size),
+                                   eye_thickness)
     
-    def _draw_eyes(self, surface, head):
+    def _draw_eyes(self, surface):  # Remove head parameter
+        if not self.body:  # Safety check
+            return
+            
+        head = self.body[-1]  # Get the head position
         eye_radius = self.block_size // 4
         pupil_radius = eye_radius // 2
         
@@ -105,8 +185,13 @@ class Snake:
                          pupil_radius)
         pygame.draw.circle(surface, (0, 0, 0),
                          (right_eye_x + pupil_offset_x, right_eye_y + pupil_offset_y),
-                         pupil_radius) 
+                         pupil_radius)
     
     def grow(self):
         """Increase the length of the snake"""
         self.length += 1 
+    
+    def die(self):
+        self.is_dead = True
+        self.death_timer = 0
+        self.death_frame = 0 

@@ -28,6 +28,10 @@ class BaseLevel:
         self.level_data['name'] = f"{level_data['name']} ({chosen_time.title()})"
         
         self.initialize_obstacles()
+        
+        # Find safe spawn position for snake before spawning food
+        self.find_safe_spawn_for_snake(game.snake)
+        
         self.spawn_food()
         self.sky_manager = SkyManager(
             game.width, 
@@ -178,11 +182,13 @@ class BaseLevel:
         snake_rect = pygame.Rect(new_x, new_y, snake.block_size, snake.block_size)
         for obstacle in self.obstacles:
             if snake_rect.colliderect(obstacle.get_hitbox()):
+                snake.die()  # Trigger death animation
                 return True
             
         # Check self collision
         head = [new_x, new_y]
         if head in snake.body[:-1] and len(snake.body) > 1:
+            snake.die()  # Trigger death animation
             return True
         
         return False
@@ -239,3 +245,48 @@ class BaseLevel:
     
     def update(self):
         self.sky_manager.update() 
+    
+    def find_safe_spawn_for_snake(self, snake):
+        """Find a safe spawn position for the snake away from obstacles"""
+        attempts = 0
+        max_attempts = 100
+        
+        while attempts < max_attempts:
+            # Try center area first, then expand to full play area
+            if attempts < 20:
+                # Try to spawn in center
+                x = self.game.width // 2 + random.randint(-100, 100)
+                y = (self.play_area['top'] + self.play_area['bottom']) // 2 + random.randint(-100, 100)
+            else:
+                # Try anywhere in play area
+                x = random.randrange(0, self.game.width - snake.block_size)
+                y = random.randrange(self.play_area['top'], self.play_area['bottom'] - snake.block_size)
+            
+            # Round to grid
+            x = round(x / snake.block_size) * snake.block_size
+            y = round(y / snake.block_size) * snake.block_size
+            
+            # Check if position is safe
+            snake_rect = pygame.Rect(x, y, snake.block_size, snake.block_size)
+            is_safe = True
+            
+            # Add padding around obstacles for safer spawn
+            padding = snake.block_size * 2
+            padded_rect = snake_rect.inflate(padding, padding)
+            
+            for obstacle in self.obstacles:
+                if padded_rect.colliderect(obstacle.get_hitbox()):
+                    is_safe = False
+                    break
+            
+            if is_safe:
+                snake.reset(x, y)
+                return
+            
+            attempts += 1
+        
+        # If we couldn't find a safe spot, use center of play area as fallback
+        fallback_x = self.game.width // 2
+        fallback_y = (self.play_area['top'] + self.play_area['bottom']) // 2
+        print("Warning: Could not find safe spawn position, using fallback position")
+        snake.reset(fallback_x, fallback_y) 
