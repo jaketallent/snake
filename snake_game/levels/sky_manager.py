@@ -100,8 +100,9 @@ class Cloud:
         if self.x > width + self.size * 4:
             self.x = -self.size * 4
     
-    def draw(self, surface, base_color):
+    def draw(self, surface):
         # Create two shades for the cloud
+        base_color = (255, 255, 255)  # Default to white
         light = (min(base_color[0] + 20, 255), 
                 min(base_color[1] + 20, 255), 
                 min(base_color[2] + 20, 255))
@@ -131,65 +132,83 @@ class Star:
         pygame.draw.rect(surface, color, [self.x, self.y, self.size, self.size])
 
 class SkyManager:
-    def __init__(self, width, height, sky_top, theme):
+    def __init__(self, width, height, top, sky_theme):
         self.width = width
         self.height = height
-        self.sky_top = sky_top
-        self.theme = theme
-        self.time = 0
+        self.top = top
+        self.sky_theme = sky_theme
         
-        # Initialize sky objects
+        # Randomize celestial body position
+        self.celestial_x = random.randint(width // 4, 3 * width // 4)  # Between 25-75% of width
+        self.celestial_y = random.randint(top + 50, height // 3)  # Keep in upper third of sky
+        
+        # Initialize celestial body with random position
+        self.celestial_body = CelestialBody(
+            self.celestial_x,
+            self.celestial_y,
+            not sky_theme.get('is_night', False)  # Sun during day, moon at night
+        )
+        
+        # Initialize clouds and stars
         self.clouds = []
         self.stars = []
-        self.celestial_body = CelestialBody(
-            width // 3,  # Position a bit more to the right
-            sky_top + height // 6,  # Position a bit higher
-            not theme.get('is_night', False)  # Sun during day, moon at night
-        )
-        self._initialize_sky_objects()
+        self.init_clouds()
+        if sky_theme.get('is_night', False):
+            self.init_stars()
         
-    def _initialize_sky_objects(self):
-        # Create clouds
-        for _ in range(5):
-            x = random.randrange(-self.width, self.width * 2)
-            y = random.randrange(self.sky_top, self.height // 3)
-            size = random.randint(8, 16)
-            speed = random.uniform(0.2, 0.5)
-            self.clouds.append(Cloud(x, y, size, speed))
-            
-        # Create stars (for night themes)
-        for _ in range(50):
-            x = random.randrange(0, self.width)
-            y = random.randrange(self.sky_top, self.height // 3)
-            self.stars.append(Star(x, y, 2))
-    
-    def update(self):
-        self.time += 0.016  # Assuming 60 FPS
-        for cloud in self.clouds:
-            cloud.update(self.width)
+        # Create gradient surface
+        self.sky_surface = self.create_gradient(sky_theme['sky_colors'])
     
     def draw(self, surface):
-        # Get base sky color based on theme and time
-        sky_colors = self.theme['sky_colors']
+        # Draw sky gradient
+        surface.blit(self.sky_surface, (0, self.top))
         
-        # Draw gradient sky
-        for y in range(self.sky_top, self.height // 3):
-            progress = (y - self.sky_top) / (self.height // 3 - self.sky_top)
-            color = self._interpolate_colors(sky_colors[0], sky_colors[1], progress)
-            pygame.draw.line(surface, color, (0, y), (self.width, y))
-        
-        # Draw stars if it's a night theme
-        if self.theme.get('is_night', False):
+        # Draw stars if it's night
+        if self.sky_theme.get('is_night', False):
             for star in self.stars:
-                star.draw(surface, self.time)
+                star.draw(surface, pygame.time.get_ticks() / 1000)
         
-        # Draw the sun or moon
+        # Draw the sun or moon using original pixel art style
         self.celestial_body.draw(surface)
         
         # Draw clouds
-        cloud_color = self.theme.get('cloud_color', (255, 255, 255))
         for cloud in self.clouds:
-            cloud.draw(surface, cloud_color)
+            cloud.draw(surface)
+    
+    def init_clouds(self):
+        """Initialize cloud objects"""
+        num_clouds = random.randint(3, 6)
+        for _ in range(num_clouds):
+            x = random.randrange(-self.width, self.width * 2)
+            y = random.randrange(self.top, self.height // 3)
+            size = random.randint(8, 16)
+            speed = random.uniform(0.2, 0.5)
+            self.clouds.append(Cloud(x, y, size, speed))
+    
+    def init_stars(self):
+        """Initialize star objects for night sky"""
+        for _ in range(50):
+            x = random.randrange(0, self.width)
+            y = random.randrange(self.top, self.height // 3)
+            self.stars.append(Star(x, y, 2))
+    
+    def create_gradient(self, colors):
+        """Create a gradient surface using the theme colors"""
+        gradient_height = self.height // 3 - self.top
+        surface = pygame.Surface((self.width, gradient_height), pygame.SRCALPHA)
+        
+        for y in range(gradient_height):
+            progress = y / gradient_height
+            color = self._interpolate_colors(colors[0], colors[1], progress)
+            pygame.draw.line(surface, color, (0, y), (self.width, y))
+        
+        return surface
     
     def _interpolate_colors(self, color1, color2, progress):
-        return tuple(int(c1 + (c2 - c1) * progress) for c1, c2 in zip(color1, color2)) 
+        """Interpolate between two colors"""
+        return tuple(int(c1 + (c2 - c1) * progress) for c1, c2 in zip(color1, color2))
+    
+    def update(self):
+        """Update cloud positions"""
+        for cloud in self.clouds:
+            cloud.update(self.width) 

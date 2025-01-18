@@ -3,9 +3,13 @@ from levels.base_level import BaseLevel
 from levels.level_data import LEVELS
 from sprites.snake import Snake
 from menu import MainMenu, LevelSelectMenu
+from audio.music_manager import MusicManager
 
 class Game:
     def __init__(self):
+        pygame.init()
+        pygame.mixer.init()  # Initialize the mixer
+        
         self.width = 800
         self.height = 600
         self.window = pygame.display.set_mode((self.width, self.height))
@@ -16,6 +20,7 @@ class Game:
         self.current_level_idx = 0
         self.current_level = None
         self.snake = Snake(self.width // 2, self.height // 2)
+        self.music_manager = MusicManager()  # Initialize music manager
         
         # Initialize font
         try:
@@ -24,6 +29,7 @@ class Game:
             print("Could not load custom font, falling back to system font")
             self.font = pygame.font.SysFont(None, 32)
         
+        self.current_time_of_day = None  # Track current time of day
         self.load_level(0)
         self.levels = LEVELS  # Store levels for menu access
         self.main_menu = MainMenu(self)
@@ -31,11 +37,16 @@ class Game:
         self.current_menu = self.main_menu
         self.in_menu = True
     
-    def load_level(self, level_idx):
+    def load_level(self, level_idx, keep_time=False):
+        """
+        Load a level
+        keep_time: If True, maintain the current time of day (for retries)
+        """
         level_data = LEVELS[level_idx]
-        self.current_level = BaseLevel(self, level_data)
+        self.current_level = BaseLevel(self, level_data, self.current_time_of_day if keep_time else None)
         self.current_level_idx = level_idx
-        # Snake position will be set by find_safe_spawn_for_snake
+        if not keep_time:
+            self.current_time_of_day = self.current_level.current_time  # Store the new time
     
     def next_level(self):
         if self.current_level_idx + 1 < len(LEVELS):
@@ -45,6 +56,7 @@ class Game:
     
     def run(self):
         running = True
+        self.music_manager.play_menu_music()  # Start with menu music
         
         while running:
             if self.in_menu:
@@ -56,6 +68,7 @@ class Game:
                     self.load_level(0)
                     if self.run_game() == "quit":
                         running = False
+                    self.music_manager.play_menu_music()  # Return to menu music
                 elif action == "level_select":
                     self.current_menu = self.level_select_menu
                 elif action == "main_menu":
@@ -106,7 +119,7 @@ class Game:
                 if event.type == pygame.KEYDOWN:
                     if game_close:
                         if event.key == pygame.K_RETURN:
-                            self.load_level(self.current_level_idx)
+                            self.load_level(self.current_level_idx, keep_time=True)  # Keep time on retry
                             game_close = False
                         continue
                 

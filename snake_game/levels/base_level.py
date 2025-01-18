@@ -7,7 +7,7 @@ from .sky_manager import SkyManager
 from .level_data import TIMES_OF_DAY
 
 class BaseLevel:
-    def __init__(self, game, level_data):
+    def __init__(self, game, level_data, time_of_day=None):
         self.game = game
         self.level_data = level_data.copy()  # Make a copy to avoid modifying the original
         self.display_name = level_data['name']  # Store the original name for display
@@ -18,14 +18,24 @@ class BaseLevel:
         self.play_area = level_data['play_area']
         self.block_size = 20
         
-        # Choose random time of day
+        # Choose time of day
         biome = level_data['biome']
-        time_options = list(TIMES_OF_DAY[biome].keys())
-        chosen_time = random.choice(time_options)
-        sky_theme = TIMES_OF_DAY[biome][chosen_time]
+        if time_of_day is None:
+            # New level/game - randomize time
+            time_options = list(TIMES_OF_DAY[biome].keys())
+            self.current_time = random.choice(time_options)
+        else:
+            # Retry - keep existing time
+            self.current_time = time_of_day
+        
+        sky_theme = TIMES_OF_DAY[biome][self.current_time]
+        
+        # Play appropriate music
+        is_night = self.current_time in ['night', 'sunset']
+        game.music_manager.play_game_music(biome, is_night)
         
         # Update full name but keep display name simple
-        self.level_data['name'] = f"{level_data['name']} ({chosen_time.title()})"
+        self.level_data['name'] = f"{level_data['name']} ({self.current_time.title()})"
         
         self.initialize_obstacles()
         
