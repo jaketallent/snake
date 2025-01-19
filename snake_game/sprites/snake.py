@@ -1,5 +1,6 @@
 import pygame
 import math
+import random
 
 class Snake:
     def __init__(self, x, y, block_size=20):
@@ -10,6 +11,11 @@ class Snake:
         self.death_frame = 0
         self.death_frames = 30  # How long to show death animation
         self.color = (0, 255, 0)  # Add default color
+        self.food_streak = 0
+        self.is_powered_up = False
+        self.power_up_timer = 0  # Keep this for animation effects only
+        self.power_up_duration = 60  # Number of frames the power-up lasts
+        self.power_up_flicker_start = 20  # Remove this since we won't auto-expire
         
     def reset(self, x, y):
         self.x = x
@@ -22,6 +28,9 @@ class Snake:
         self.is_dead = False  # Reset death state
         self.death_timer = 0  # Reset death animation timer
         self.death_frame = 0  # Reset death animation frame
+        self.food_streak = 0
+        self.is_powered_up = False
+        self.power_up_timer = 0
         
     def handle_input(self, event):
         if event.type == pygame.KEYDOWN:
@@ -78,6 +87,10 @@ class Snake:
     
     def draw(self, surface):
         if not self.is_dead:
+            # Draw power-up effect if active
+            if self.is_powered_up:
+                self._draw_power_up_effect(surface)
+            
             # Draw snake body segments with pixel-art style
             for segment in self.body:
                 # Draw each segment as 4x4 pixel blocks for retro look
@@ -195,3 +208,77 @@ class Snake:
         self.is_dead = True
         self.death_timer = 0
         self.death_frame = 0 
+
+    def _draw_power_up_effect(self, surface):
+        # Remove flickering check since we're not expiring
+        time = pygame.time.get_ticks()
+        
+        # Draw pixelated energy aura around snake
+        for segment in self.body:
+            # Create pixel positions for the aura
+            block = self.block_size // 4
+            
+            # Inner glow (yellow)
+            offset = math.sin(time / 100) * 2  # Pulsing effect
+            for i in range(8):
+                angle = (i * math.pi / 4) + (time / 200)
+                for r in range(2, 5):  # Multiple layers of glow
+                    x = segment[0] + self.block_size/2 + math.cos(angle) * (r * 3 + offset)
+                    y = segment[1] + self.block_size/2 + math.sin(angle) * (r * 3 + offset)
+                    # Draw pixelated points
+                    pygame.draw.rect(surface, (255, 255, 0, 150),
+                                   [int(x) - block//2, int(y) - block//2,
+                                    block, block])
+            
+            # Outer energy (white/blue flashes)
+            if time % 8 < 4:  # Flashing effect
+                for i in range(12):
+                    angle = (i * math.pi / 6) + (time / 150)
+                    x = segment[0] + self.block_size/2 + math.cos(angle) * (8 + offset)
+                    y = segment[1] + self.block_size/2 + math.sin(angle) * (8 + offset)
+                    color = (200, 240, 255) if i % 2 == 0 else (255, 255, 255)
+                    pygame.draw.rect(surface, color,
+                                   [int(x) - 1, int(y) - 1, 2, 2])
+            
+            # Energy particles
+            for i in range(4):
+                angle = (time / 100) + (i * math.pi / 2)
+                dist = 6 + math.sin(time / 150 + i) * 3
+                x = segment[0] + self.block_size/2 + math.cos(angle) * dist
+                y = segment[1] + self.block_size/2 + math.sin(angle) * dist
+                # Alternate between yellow and white particles
+                color = (255, 255, 0) if i % 2 == 0 else (255, 255, 255)
+                size = block if i % 2 == 0 else block//2
+                pygame.draw.rect(surface, color,
+                               [int(x) - size//2, int(y) - size//2,
+                                size, size])
+            
+            # Lightning-like effects (occasional)
+            if time % 20 < 2:  # Brief flashes
+                for _ in range(2):
+                    start_angle = random.random() * math.pi * 2
+                    x1 = segment[0] + self.block_size/2 + math.cos(start_angle) * 6
+                    y1 = segment[1] + self.block_size/2 + math.sin(start_angle) * 6
+                    end_angle = start_angle + random.uniform(-0.5, 0.5)
+                    x2 = segment[0] + self.block_size/2 + math.cos(end_angle) * 12
+                    y2 = segment[1] + self.block_size/2 + math.sin(end_angle) * 12
+                    pygame.draw.line(surface, (255, 255, 255),
+                                   (int(x1), int(y1)), (int(x2), int(y2)), 2)
+
+    def update_power_up(self):
+        if self.is_powered_up:
+            self.power_up_timer += 1
+            if self.power_up_timer >= 60:  # Reset animation timer every 60 frames
+                self.power_up_timer = 0
+
+    def handle_food_eaten(self):
+        """Call this when food is eaten"""
+        self.food_streak += 1
+        if self.food_streak >= 5:  # Changed back from 2 to 5
+            self.is_powered_up = True
+            self.food_streak = 0
+
+    def destroy_obstacle(self):
+        """Call this when destroying an obstacle with power-up"""
+        self.is_powered_up = False
+        self.power_up_timer = 0 

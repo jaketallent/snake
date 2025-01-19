@@ -1,4 +1,6 @@
 import pygame
+import random
+import math
 from levels.base_level import BaseLevel
 from levels.level_data import LEVELS
 from sprites.snake import Snake
@@ -36,6 +38,15 @@ class Game:
         self.level_select_menu = LevelSelectMenu(self)
         self.current_menu = self.main_menu
         self.in_menu = True
+        
+        # Initialize persistent background elements
+        self.stars = [
+            {'x': random.randint(0, self.width),
+             'y': random.randint(0, self.height),
+             'size': random.randint(1, 3),
+             'twinkle_offset': random.random() * math.pi * 2}
+            for _ in range(100)
+        ]
     
     def load_level(self, level_idx, keep_time=False):
         """
@@ -129,6 +140,7 @@ class Game:
 
             # Update and draw game state
             self.current_level.update()
+            self.snake.update_power_up()
             
             # Draw game state
             self.current_level.draw(self.window)
