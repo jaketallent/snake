@@ -181,7 +181,7 @@ class BaseLevel:
             new_y = self.play_area['top']
             hit_wall = True
         
-        # Move snake to new position
+        # Move snake to new position first
         snake.move_to(new_x, new_y)
         
         if hit_wall:
@@ -190,15 +190,24 @@ class BaseLevel:
         
         # Check obstacle collision
         snake_rect = pygame.Rect(new_x, new_y, snake.block_size, snake.block_size)
-        for obstacle in self.obstacles:
+        for i, obstacle in enumerate(self.obstacles):
             if snake_rect.colliderect(obstacle.get_hitbox()):
-                snake.die()  # Trigger death animation
-                return True
-            
-        # Check self collision
+                # Skip if already being destroyed or discharged
+                if obstacle.is_being_destroyed or obstacle.is_discharging:
+                    continue
+                
+                if snake.is_powered_up:
+                    obstacle.start_destruction()
+                    snake.destroy_obstacle()
+                    return False
+                else:
+                    snake.die()
+                    return True
+        
+        # Check self collision last
         head = [new_x, new_y]
         if head in snake.body[:-1] and len(snake.body) > 1:
-            snake.die()  # Trigger death animation
+            snake.die()
             return True
         
         return False
@@ -207,7 +216,6 @@ class BaseLevel:
         if not self.food:
             return False
         
-        # Use collision rectangles instead of exact coordinate matching
         snake_rect = pygame.Rect(snake.x, snake.y, 
                                snake.block_size, snake.block_size)
         food_rect = pygame.Rect(self.food.x, self.food.y, 
@@ -215,6 +223,7 @@ class BaseLevel:
         
         if snake_rect.colliderect(food_rect):
             self.food_count += 1
+            snake.handle_food_eaten()
             self.spawn_food()
             return True
         return False
@@ -254,7 +263,14 @@ class BaseLevel:
                                    [x, y + offset, block_size, block_size]) 
     
     def update(self):
-        self.sky_manager.update() 
+        self.sky_manager.update()
+        
+        # Update all obstacles
+        for obs in self.obstacles:
+            if obs.update_destruction():
+                # Only remove if it was destroyed (not discharged)
+                if obs.is_being_destroyed and obs.can_be_destroyed:
+                    self.obstacles.remove(obs)
     
     def find_safe_spawn_for_snake(self, snake):
         """Find a safe spawn position for the snake away from obstacles"""
