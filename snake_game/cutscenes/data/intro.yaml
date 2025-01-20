@@ -1,0 +1,79 @@
+sprites:
+  nest:
+    type: nest
+    position: [center_x + 30, center_y]
+  eagle:
+    type: eagle
+    position: [width + 50, 150]
+  snake_god:
+    type: snake_god
+    position: [center_x, height / 6]
+
+snake:
+  position: [center_x - 30, center_y]
+  state:
+    sleeping: false
+    length: 1
+
+sequence:
+  - type: dialogue
+    text: "Ah, my sweet baby eggs..."
+    actions:
+      - [snake_emote, heart]
+      - [snake_look_at, nest]
+  
+  - type: action
+    duration: 90
+    actions:
+      - [snake_sleep, true]
+      - [fade_heart, 0.1]
+      - [stop_looking, 0.8]
+  
+  - type: dialogue
+    text: "Zzz..."
+  
+  - type: action
+    duration: 120
+    actions:
+      - [eagle_swoop, true]
+      - [take_eggs, 0.4]
+  
+  - type: dialogue
+    text: "!!!"
+    actions:
+      - [snake_sleep, false]
+
+  - type: dialogue
+    text: "No! My children!"
+  
+  - type: action
+    duration: 120
+    actions:
+      - [snake_god_appear, true]
+  
+  - type: dialogue
+    text: "I am the snake god."
+
+  - type: dialogue
+    text: "Despair not, my child."
+
+  - type: dialogue
+    text: "You shall have your revenge - but not as you are."
+
+  - type: dialogue
+    text: "The world is vast, and the eagle shall be miles away within the hour."
+
+  - type: dialogue
+    text: "And there is a multitude of its kind in the wide world. You shall never find it."
+
+  - type: dialogue
+    text: "The only way to destroy the one who took your children is to become my avatar."
+
+  - type: dialogue
+    text: "Go forth and eat the creatures of the desert, for they are stupid and short-lived, and you are a snake."
+
+  - type: dialogue
+    text: "Eat and grow. Become powerful. Should you perish, I shall resurrect you."
+
+  - type: dialogue
+    text: "When you are ready, I shall bless you with more power."
