@@ -112,18 +112,22 @@ TIMES_OF_DAY = {
 LEVELS = [
     {
         'name': 'Desert',
+        'biome': 'desert',
         'background_colors': {
             'ground': [(242, 209, 158), (236, 197, 139), (229, 184, 116), (219, 169, 95)]
         },
-        'biome': 'desert',  # Used to look up time-of-day schemes
         'obstacle_type': 'cactus',
         'obstacle_count': 5,
         'critters': DESERT_CRITTERS,
         'required_food': 5,
-        'play_area': {'top': 200, 'bottom': 600}
+        'play_area': {'top': 200, 'bottom': 600},
+        'cutscenes': {
+            'intro': 'desert_intro'
+        }
     },
     {
         'name': 'Forest',
+        'biome': 'forest',
         'background_colors': {
             'ground': [
                 (34, 139, 34),   # Forest green
@@ -132,7 +136,6 @@ LEVELS = [
                 (48, 98, 48)     # Deep forest green
             ]
         },
-        'biome': 'forest',  # Used to look up time-of-day schemes
         'obstacles': [
             {
                 'type': 'tree',
@@ -155,6 +158,9 @@ LEVELS = [
         ],
         'critters': FOREST_CRITTERS,
         'required_food': 7,
-        'play_area': {'top': 150, 'bottom': 600}
+        'play_area': {'top': 150, 'bottom': 600},
+        'cutscenes': {
+            'intro': 'forest_intro'
+        }
     }
 ] 

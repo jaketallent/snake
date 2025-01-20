@@ -16,6 +16,11 @@ class Snake:
         self.power_up_timer = 0  # Keep this for animation effects only
         self.power_up_duration = 60  # Number of frames the power-up lasts
         self.power_up_flicker_start = 20  # Remove this since we won't auto-expire
+        self.is_sleeping = False
+        self.zzz_timer = 0  # Keep only this from the sleeping-related vars
+        self.look_at_point = None  # Point the snake is looking at
+        self.emote = None  # Current emote to display
+        self.emote_timer = 0
         
     def reset(self, x, y):
         self.x = x
@@ -86,27 +91,7 @@ class Snake:
         self.wall_bounce_cooldown = 3
     
     def draw(self, surface):
-        if not self.is_dead:
-            # Draw power-up effect if active
-            if self.is_powered_up:
-                self._draw_power_up_effect(surface)
-            
-            # Draw snake body segments with pixel-art style
-            for segment in self.body:
-                # Draw each segment as 4x4 pixel blocks for retro look
-                block = self.block_size // 4
-                for i in range(4):
-                    for j in range(4):
-                        # Create shading pattern: darker on bottom/right edges
-                        color = (0, 200, 0) if (i == 3 or j == 3) else (0, 255, 0)
-                        pygame.draw.rect(surface, color,
-                                       [segment[0] + (j * block),
-                                        segment[1] + (i * block),
-                                        block, block])
-            # Draw eyes on head
-            if self.body:
-                self._draw_eyes(surface)
-        else:
+        if self.is_dead:
             # Death animation
             self.death_timer += 1
             progress = self.death_timer / self.death_frames
@@ -172,12 +157,49 @@ class Snake:
                                    (eye_pos[0] - eye_size, eye_pos[1] + eye_size),
                                    (eye_pos[0] + eye_size, eye_pos[1] - eye_size),
                                    eye_thickness)
+        else:
+            # Draw power-up effect if active
+            if self.is_powered_up:
+                self._draw_power_up_effect(surface)
+            
+            # Draw snake body segments with pixel-art style
+            for segment in self.body:
+                # Draw each segment as 4x4 pixel blocks for retro look
+                block = self.block_size // 4
+                for i in range(4):
+                    for j in range(4):
+                        # Create shading pattern: darker on bottom/right edges
+                        color = (0, 200, 0) if (i == 3 or j == 3) else (0, 255, 0)
+                        pygame.draw.rect(surface, color,
+                                       [segment[0] + (j * block),
+                                        segment[1] + (i * block),
+                                        block, block])
+            
+            # Draw eyes
+            if self.body:
+                self._draw_eyes(surface)
+            
+            # Draw emote (if any) before Zzz animation
+            if self.emote:
+                self._draw_emote(surface)
+            
+            # Draw Zzz animation if sleeping
+            if self.is_sleeping:
+                self.zzz_timer += 1
+                if self.zzz_timer % 60 < 30:  # Animate every half second
+                    zzz_color = (255, 255, 255)
+                    for i in range(3):
+                        x = self.x + 30 + (i * 10)
+                        y = self.y - 20 - (i * 10)
+                        size = 5 + (i * 2)
+                        pygame.draw.rect(surface, zzz_color,
+                                       [x, y, size, size])
     
-    def _draw_eyes(self, surface):  # Remove head parameter
+    def _draw_eyes(self, surface):
         if not self.body:  # Safety check
             return
             
-        head = self.body[-1]  # Get the head position
+        head = self.body[-1]
         eye_radius = self.block_size // 4
         pupil_radius = eye_radius // 2
         
@@ -187,18 +209,76 @@ class Snake:
         right_eye_x = head[0] + 3 * self.block_size // 4
         right_eye_y = head[1] + self.block_size // 4
         
+        # Draw white part of eyes
         pygame.draw.circle(surface, (255, 255, 255), (left_eye_x, left_eye_y), eye_radius)
         pygame.draw.circle(surface, (255, 255, 255), (right_eye_x, right_eye_y), eye_radius)
         
-        pupil_offset_x = self.dx / self.block_size * (eye_radius // 2)
-        pupil_offset_y = self.dy / self.block_size * (eye_radius // 2)
+        if self.is_sleeping:
+            # Draw sleeping dashes
+            dash_length = eye_radius
+            for eye_x in [left_eye_x, right_eye_x]:
+                pygame.draw.line(surface, (0, 0, 0),
+                               (eye_x - dash_length//2, left_eye_y),
+                               (eye_x + dash_length//2, left_eye_y),
+                               2)
+        else:
+            # Calculate pupil position based on look_at_point or movement
+            if self.look_at_point:
+                # Calculate angle to look_at_point for each eye
+                for eye_x, eye_y in [(left_eye_x, left_eye_y), (right_eye_x, right_eye_y)]:
+                    dx = self.look_at_point[0] - eye_x
+                    dy = self.look_at_point[1] - eye_y
+                    angle = math.atan2(dy, dx)
+                    pupil_x = eye_x + math.cos(angle) * (eye_radius // 2)
+                    pupil_y = eye_y + math.sin(angle) * (eye_radius // 2)
+                    pygame.draw.circle(surface, (0, 0, 0), (int(pupil_x), int(pupil_y)), pupil_radius)
+            else:
+                # Normal movement-based pupils
+                pupil_offset_x = self.dx / self.block_size * (eye_radius // 2)
+                pupil_offset_y = self.dy / self.block_size * (eye_radius // 2)
+                
+                for eye_x, eye_y in [(left_eye_x, left_eye_y), (right_eye_x, right_eye_y)]:
+                    pygame.draw.circle(surface, (0, 0, 0),
+                                     (eye_x + pupil_offset_x, eye_y + pupil_offset_y),
+                                     pupil_radius)
+    
+    def _draw_emote(self, surface):
+        if not self.emote or not self.body:
+            return
+            
+        head = self.body[-1]
+        emote_y = head[1] - 25
+        emote_x = head[0] + self.block_size // 2
         
-        pygame.draw.circle(surface, (0, 0, 0),
-                         (left_eye_x + pupil_offset_x, left_eye_y + pupil_offset_y),
-                         pupil_radius)
-        pygame.draw.circle(surface, (0, 0, 0),
-                         (right_eye_x + pupil_offset_x, right_eye_y + pupil_offset_y),
-                         pupil_radius)
+        if self.emote == 'heart':
+            # Draw simple 8-bit heart
+            color = (255, 0, 0)  # Bright red
+            pixel_size = 3
+            
+            # Heart pattern (1 = pixel, 0 = empty)
+            heart_pattern = [
+                [0,1,1,0,1,1,0],
+                [1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1],
+                [0,1,1,1,1,1,0],
+                [0,0,1,1,1,0,0],
+                [0,0,0,1,0,0,0],
+            ]
+            
+            # Draw each pixel of the heart
+            for y, row in enumerate(heart_pattern):
+                for x, pixel in enumerate(row):
+                    if pixel:
+                        pygame.draw.rect(surface, color,
+                                       [emote_x - (len(row) * pixel_size // 2) + (x * pixel_size),
+                                        emote_y + (y * pixel_size),
+                                        pixel_size, pixel_size])
+        
+        elif self.emote == 'exclamation':
+            # Draw exclamation mark
+            color = (255, 255, 255)
+            pygame.draw.rect(surface, color, (emote_x - 2, emote_y - 12, 4, 8))
+            pygame.draw.rect(surface, color, (emote_x - 2, emote_y - 2, 4, 4))
     
     def grow(self):
         """Increase the length of the snake"""
@@ -282,3 +362,12 @@ class Snake:
         """Call this when destroying an obstacle with power-up"""
         self.is_powered_up = False
         self.power_up_timer = 0 
+
+    def look_at(self, point):
+        """Make the snake look at a specific point"""
+        self.look_at_point = point
+    
+    def show_emote(self, emote_type):
+        """Show an emote above the snake's head"""
+        self.emote = emote_type
+        self.emote_timer = 0 

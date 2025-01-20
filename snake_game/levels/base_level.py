@@ -5,6 +5,7 @@ from sprites.food import Food
 from sprites.obstacle import Cactus, Tree, Bush, Pond
 from .sky_manager import SkyManager
 from .level_data import TIMES_OF_DAY
+from cutscenes.base_cutscene import BaseCutscene
 
 class BaseLevel:
     def __init__(self, game, level_data, time_of_day=None):
@@ -30,9 +31,9 @@ class BaseLevel:
         
         sky_theme = TIMES_OF_DAY[biome][self.current_time]
         
-        # Play appropriate music
+        # Remove music playing from here
         is_night = self.current_time in ['night', 'sunset']
-        game.music_manager.play_game_music(biome, is_night)
+        self.night_music = is_night  # Store for later
         
         # Update full name but keep display name simple
         self.level_data['name'] = f"{level_data['name']} ({self.current_time.title()})"
@@ -49,6 +50,14 @@ class BaseLevel:
             0,  # sky starts at top
             sky_theme
         )
+        
+        self.current_cutscene = None
+        
+        # Set up cutscene mappings - no defaults, just use what's in the level data
+        self.cutscenes = level_data.get('cutscenes', {})
+        
+        # Show intro if this level has an intro cutscene
+        self.show_intro = 'intro' in self.cutscenes
     
     def initialize_obstacles(self):
         if 'obstacle_type' in self.level_data:
@@ -238,6 +247,10 @@ class BaseLevel:
             obstacle.draw(surface)
         if self.food:
             self.food.draw(surface)
+        
+        # Draw cutscene if active
+        if self.current_cutscene:
+            self.current_cutscene.draw(surface)
     
     def draw_background(self, surface):
         # Draw sky using sky manager
@@ -263,6 +276,13 @@ class BaseLevel:
                                    [x, y + offset, block_size, block_size]) 
     
     def update(self):
+        # Update cutscene if active
+        if self.current_cutscene:
+            self.current_cutscene.update()
+            if self.current_cutscene.is_complete:
+                self.current_cutscene = None
+            return
+        
         self.sky_manager.update()
         
         # Update all obstacles
@@ -315,4 +335,32 @@ class BaseLevel:
         fallback_x = self.game.width // 2
         fallback_y = (self.play_area['top'] + self.play_area['bottom']) // 2
         print("Warning: Could not find safe spawn position, using fallback position")
-        snake.reset(fallback_x, fallback_y) 
+        snake.reset(fallback_x, fallback_y)
+    
+    def start_intro_cutscene(self):
+        self.game.music_manager.stop_music()
+        self.trigger_cutscene('intro')
+    
+    def cleanup(self, stop_music=True):
+        """Clean up level state when exiting"""
+        self.current_cutscene = None
+        if stop_music:
+            self.game.music_manager.stop_music()
+
+    def start_gameplay(self):
+        """Called when cutscene ends and gameplay begins"""
+        # Reset snake state when gameplay starts
+        self.game.snake.is_sleeping = False
+        self.game.snake.emote = None
+        self.game.snake.look_at(None)
+        # Start appropriate music
+        self.game.music_manager.play_game_music(
+            self.level_data['biome'], 
+            self.night_music
+        )
+
+    def trigger_cutscene(self, trigger_id):
+        if trigger_id in self.cutscenes:
+            cutscene_id = self.cutscenes[trigger_id]
+            self.game.music_manager.stop_music()
+            self.current_cutscene = BaseCutscene(self.game, cutscene_id) 
