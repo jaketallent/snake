@@ -120,7 +120,10 @@ LEVELS = [
         'obstacle_count': 5,
         'critters': DESERT_CRITTERS,
         'required_food': 5,
-        'play_area': {'top': 200, 'bottom': 600}
+        'play_area': {'top': 200, 'bottom': 600},
+        'cutscenes': {
+            'intro': 'desert_intro'
+        }
     },
     {
         'name': 'Forest',
@@ -155,6 +158,9 @@ LEVELS = [
         ],
         'critters': FOREST_CRITTERS,
         'required_food': 7,
-        'play_area': {'top': 150, 'bottom': 600}
+        'play_area': {'top': 150, 'bottom': 600},
+        'cutscenes': {
+            'intro': 'forest_intro'
+        }
     }
 ] 

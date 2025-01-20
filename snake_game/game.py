@@ -106,6 +106,9 @@ class Game:
                     self.in_menu = True
                     self.current_menu = self.main_menu
                     self.music_manager.play_menu_music()
+                elif result == "restart_game":  # Handle the new return value
+                    # Just let the loop continue - it will start a fresh run_game()
+                    pass
     
     def run_menu(self):
         while True:
@@ -125,11 +128,11 @@ class Game:
         game_over = False
         game_close = False
         
-        # Only start intro cutscene if this is level 1 AND we're not returning from menu
-        if self.current_level_idx == 0 and not self.current_level.current_cutscene:
+        # Start intro cutscene if the level has one and we're not returning from menu
+        if self.current_level.show_intro and not self.current_level.current_cutscene:
             self.current_level.start_intro_cutscene()
         else:
-            # For other levels, ensure music is playing if no cutscene
+            # No cutscene, start gameplay
             if not self.current_level.current_cutscene:
                 self.current_level.start_gameplay()
 
@@ -218,7 +221,7 @@ class Game:
                             # After player presses ENTER, load next level
                             self.music_manager.stop_music()
                             self.load_level(next_level_idx)
-                            self.current_level.start_gameplay()
+                            return "restart_game"  # Add this return value to force a fresh game state
             
             # Show game over message if needed
             if game_close:

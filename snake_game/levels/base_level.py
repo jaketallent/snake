@@ -52,13 +52,12 @@ class BaseLevel:
         )
         
         self.current_cutscene = None
-        # Only show intro cutscene for first level
-        self.show_intro = (game.current_level_idx == 0)
         
-        # Set up cutscene mappings, ensuring 'intro' is always available
+        # Set up cutscene mappings - no defaults, just use what's in the level data
         self.cutscenes = level_data.get('cutscenes', {})
-        if 'intro' not in self.cutscenes:
-            self.cutscenes['intro'] = 'intro'
+        
+        # Show intro if this level has an intro cutscene
+        self.show_intro = 'intro' in self.cutscenes
     
     def initialize_obstacles(self):
         if 'obstacle_type' in self.level_data:
@@ -339,7 +338,7 @@ class BaseLevel:
         snake.reset(fallback_x, fallback_y)
     
     def start_intro_cutscene(self):
-        self.game.music_manager.stop_music()  # Stop music when cutscene starts
+        self.game.music_manager.stop_music()
         self.trigger_cutscene('intro')
     
     def cleanup(self, stop_music=True):
@@ -362,6 +361,6 @@ class BaseLevel:
 
     def trigger_cutscene(self, trigger_id):
         if trigger_id in self.cutscenes:
-            self.game.music_manager.stop_music()  # Stop music for any cutscene
             cutscene_id = self.cutscenes[trigger_id]
+            self.game.music_manager.stop_music()
             self.current_cutscene = BaseCutscene(self.game, cutscene_id) 

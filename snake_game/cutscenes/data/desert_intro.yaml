@@ -7,7 +7,7 @@ sprites:
     position: [width + 50, 150]
   snake_god:
     type: snake_god
-    position: [center_x, height / 6]
+    position: [center_x, 150]
 
 snake:
   position: [center_x - 30, center_y]
@@ -61,7 +61,7 @@ sequence:
     text: "You shall have your revenge - but not as you are."
 
   - type: dialogue
-    text: "The world is vast, and the eagle shall be miles away within the hour."
+    text: "The eagle shall be miles away within the hour."
 
   - type: dialogue
     text: "And there is a multitude of its kind in the wide world. You shall never find it."
