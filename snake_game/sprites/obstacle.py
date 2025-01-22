@@ -204,8 +204,8 @@ class Tree(Obstacle):
         if self.is_being_destroyed:
             # Collect all pixels that make up the tree
             pixels = []
-            height = self.variations['height'] * 24
-            width = self.variations['width'] * 16
+            height = int(self.variations['height'] * 24)  # Convert to int
+            width = int(self.variations['width'] * 16)    # Convert to int
             trunk_width = max(16, width // 3)
             
             # Trunk pixels
@@ -214,18 +214,18 @@ class Tree(Obstacle):
             
             # Leaf pixels
             leaf_sections = 4
-            leaf_height = height * 0.7
+            leaf_height = int(height * 0.7)  # Convert to int
             leaf_start_y = self.y
             
             for i in range(leaf_sections):
-                section_width = width - (i * width // (leaf_sections * 2))
+                section_width = int(width - (i * width // (leaf_sections * 2)))  # Convert to int
                 section_width += self.variations.get(f'section_{i}_width', 0)
                 section_x = self.x + (trunk_width - section_width) // 2
                 section_height = leaf_height // leaf_sections
                 offset_x = self.variations.get(f'section_{i}_offset', 0)
                 section_x += offset_x
                 
-                for y in range(int(section_height)):
+                for y in range(int(section_height)):  # Convert to int
                     pixels.append((section_x, leaf_start_y + (i * section_height) + y,
                                  section_width, 1))
             
