@@ -405,9 +405,6 @@ class Pond(Obstacle):
     def draw(self, surface):
         if self.is_discharging:
             self.draw_discharge_effect(surface)
-        elif self.is_being_destroyed:
-            # This shouldn't happen since can_be_destroyed is False
-            pass
         else:
             WATER_COLORS = [
                 (65, 105, 225),   # Royal blue
@@ -420,18 +417,14 @@ class Pond(Obstacle):
             height = self.variations['height'] * 12
             pixel_size = 4  # Size of each "pixel" block
             
-            # Calculate base rectangle
-            x = self.x
-            y = self.y
-            
             # Draw layers from bottom to top
             for i, color in enumerate(reversed(WATER_COLORS)):
                 # Each layer is slightly smaller
                 shrink = i * pixel_size * 2
                 layer_width = width - shrink
                 layer_height = height - shrink
-                layer_x = x + (shrink // 2)
-                layer_y = y + (shrink // 2)
+                layer_x = self.x + (shrink // 2)
+                layer_y = self.y + (shrink // 2)
                 
                 # Draw the layer as pixel blocks
                 for px in range(int(layer_x), int(layer_x + layer_width), pixel_size):
@@ -444,7 +437,155 @@ class Pond(Obstacle):
                         pygame.draw.rect(surface, color,
                                        [px, py, pixel_size, pixel_size])
     
-    def get_custom_hitbox(self):
+    def get_hitbox(self):
+        width = self.variations['width'] * 16
+        height = self.variations['height'] * 12
+        return pygame.Rect(self.x, self.y, width, height)
+
+class Building(Obstacle):
+    def get_base_sort_y(self):
+        """
+        Return the vertical "foot" of the base section.
+        """
+        return self.y + self.variations['base_height']
+
+    def get_top_sort_y(self):
+        """
+        Return the vertical position for drawing the top. 
+        Use the full building height so it's always drawn last
+        if the building is taller than the snake.
+        """
+        total_height = self.variations['height'] * 24
+        return self.y + total_height
+
+    def draw_base(self, surface):
+        BUILDING_COLORS = {
+            'main': (128, 128, 128),
+            'shadow': (100, 100, 100),
+            'windows': (200, 200, 100),
+        }
+        width = self.variations['width'] * 16
+        base_height = self.variations['base_height']
+        self._draw_building_section(surface, BUILDING_COLORS, self.x, self.y, width, base_height)
+
+    def draw_top(self, surface):
+        BUILDING_COLORS = {
+            'main': (128, 128, 128),
+            'shadow': (100, 100, 100),
+            'windows': (200, 200, 100),
+        }
+        width = self.variations['width'] * 16
+        total_height = self.variations['height'] * 24
+        base_height = self.variations['base_height']
+        self._draw_building_section(
+            surface,
+            BUILDING_COLORS,
+            self.x,
+            self.y - (total_height - base_height),
+            width,
+            total_height - base_height
+        )
+
+    def draw(self, surface):
+        # For non-city biomes or fallback
+        self.draw_base(surface)
+        self.draw_top(surface)
+
+    def _draw_building_section(self, surface, colors, x, y, width, height):
+        # Main building body with shadow effect
+        pygame.draw.rect(surface, colors['shadow'],
+                        [x + 4, y, width, height])
+        pygame.draw.rect(surface, colors['main'],
+                        [x, y, width - 4, height])
+        
+        # Windows
+        window_size = 8
+        window_spacing = 16
+        for row in range(height // window_spacing):
+            for col in range((width - 4) // window_spacing):
+                if random.random() > 0.3:  # 70% chance of lit window
+                    pygame.draw.rect(surface, colors['windows'],
+                                   [x + col * window_spacing + 4,
+                                    y + row * window_spacing + 4,
+                                    window_size, window_size])
+    
+    def get_hitbox(self):
+        # Hitbox is just the base
+        width = self.variations['width'] * 16
+        return pygame.Rect(self.x, self.y, width, self.variations['base_height'])
+
+    def is_snake_behind(self, snake):
+        """Check if the snake is behind this building's top section"""
+        snake_rect = pygame.Rect(snake.x, snake.y, snake.block_size, snake.block_size)
+        total_height = self.variations['height'] * 24
+        base_height = self.variations['base_height']
+        width = self.variations['width'] * 16
+        
+        # Define the area where the snake should be considered "behind" the building
+        building_rect = pygame.Rect(
+            self.x,  # No padding needed
+            self.y - (total_height - base_height),  # Top section starts here
+            width,
+            total_height - base_height  # Only check against top section height
+        )
+        
+        return snake_rect.colliderect(building_rect)
+
+class Park(Obstacle):
+    def __init__(self, x, y, variations, block_size=20):
+        super().__init__(x, y, variations, block_size)
+        self.can_be_destroyed = False  # Parks can't be destroyed
+    
+    def draw(self, surface):
+        if self.is_discharging:
+            self.draw_discharge_effect(surface)
+        else:
+            # Park colors
+            COLORS = {
+                'water': [
+                    (65, 105, 225),   # Royal blue
+                    (30, 144, 255),   # Dodger blue
+                    (135, 206, 235),  # Sky blue
+                ],
+                'grass': [
+                    (34, 139, 34),    # Forest green
+                    (0, 100, 0),      # Dark green
+                ],
+                'path': (210, 180, 140)  # Tan path color
+            }
+            
+            # Make sure park fills the entire block
+            width = self.variations['width'] * 16
+            height = self.variations['height'] * 12
+            
+            # Draw grass border
+            pygame.draw.rect(surface, COLORS['grass'][0],
+                           [self.x, self.y, width, height])
+            
+            # Draw water with animated edges
+            pond_margin = width // 8  # Scale margin with block size
+            pond_width = width - pond_margin * 2
+            pond_height = height - pond_margin * 2
+            pixel_size = 4
+            
+            # Draw water layers
+            for i, color in enumerate(reversed(COLORS['water'])):
+                shrink = i * pixel_size * 2
+                layer_width = pond_width - shrink
+                layer_height = pond_height - shrink
+                layer_x = self.x + pond_margin + (shrink // 2)
+                layer_y = self.y + pond_margin + (shrink // 2)
+                
+                for px in range(int(layer_x), int(layer_x + layer_width), pixel_size):
+                    for py in range(int(layer_y), int(layer_y + layer_height), pixel_size):
+                        if (px == layer_x or px >= layer_x + layer_width - pixel_size or
+                            py == layer_y or py >= layer_y + layer_height - pixel_size):
+                            if random.random() > 0.7:
+                                continue
+                        pygame.draw.rect(surface, color,
+                                       [px, py, pixel_size, pixel_size])
+    
+    def get_hitbox(self):
         width = self.variations['width'] * 16
         height = self.variations['height'] * 12
         return pygame.Rect(self.x, self.y, width, height) 

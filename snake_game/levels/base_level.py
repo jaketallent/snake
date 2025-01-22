@@ -2,7 +2,8 @@ import pygame
 import random
 import math
 from sprites.food import Food
-from sprites.obstacle import Cactus, Tree, Bush, Pond
+from sprites.obstacle import Cactus, Tree, Bush, Pond, Building, Park
+from sprites.snake import Snake
 from .sky_manager import SkyManager
 from .level_data import TIMES_OF_DAY
 from cutscenes.base_cutscene import BaseCutscene
@@ -77,68 +78,118 @@ class BaseLevel:
                 )
     
     def _create_obstacles(self, obstacle_type, count, min_size=2, max_size=5):
-        attempts = 0
-        placed = 0
-        max_attempts = count * 10  # Prevent infinite loops
-        
-        while placed < count and attempts < max_attempts:
-            x = round(random.randrange(0, self.game.width - self.block_size) / self.block_size) * self.block_size
-            y = round(random.randrange(self.play_area['top'], self.play_area['bottom'] - self.block_size) / self.block_size) * self.block_size
+        if self.level_data['biome'] == 'city':
+            block_size = 120  # Same as in _draw_city_background
+            road_width = 40   # Same as in _draw_city_background
             
-            # Create variations based on obstacle type
-            if obstacle_type == 'cactus':
-                variations = {
-                    'height': random.randint(3, 5),
-                    'arm_height': random.randint(1, 2),
-                    'has_second_arm': random.random() > 0.5,
-                    'arm_direction': random.choice([-1, 1])
-                }
-                new_obstacle = Cactus(x, y, variations)
-                
-            elif obstacle_type == 'tree':
-                height = random.randint(min_size, max_size)
-                width = random.randint(min_size-1, max_size-1)
-                variations = {
-                    'height': height,
-                    'width': width,
-                }
-                for i in range(4):
-                    variations[f'section_{i}_width'] = random.randint(-8, 8)
-                    variations[f'section_{i}_offset'] = random.randint(-4, 4)
-                new_obstacle = Tree(x, y, variations)
-                
-            elif obstacle_type == 'bush':
-                variations = {
-                    'size': random.randint(min_size, max_size)
-                }
-                new_obstacle = Bush(x, y, variations)
-                
-            elif obstacle_type == 'pond':
-                variations = {
-                    'width': random.randint(min_size, max_size),
-                    'height': random.randint(min_size-1, max_size-1)
-                }
-                new_obstacle = Pond(x, y, variations)
+            # Calculate grid positions for blocks between roads
+            grid_positions = []
+            for y in range(self.play_area['top'], self.play_area['bottom'] - block_size, block_size):
+                for x in range(0, self.game.width - block_size, block_size):
+                    # Calculate the position of the block (space between roads)
+                    block_x = x + road_width // 2
+                    block_y = y + road_width // 2
+                    block_width = block_size - road_width
+                    block_height = block_size - road_width
+                    grid_positions.append((block_x, block_y, block_width, block_height))
             
-            # Check for collisions with existing obstacles
-            collision = False
-            new_hitbox = new_obstacle.get_hitbox()
-            for existing_obstacle in self.obstacles:
-                # Add some padding around the hitbox for better spacing
-                padding = self.block_size
-                padded_hitbox = new_hitbox.inflate(padding, padding)
-                if padded_hitbox.colliderect(existing_obstacle.get_hitbox()):
-                    collision = True
+            # Get positions that aren't already occupied
+            occupied_positions = set()
+            for obs in self.obstacles:
+                for pos in grid_positions:
+                    x, y, w, h = pos
+                    if obs.get_hitbox().colliderect(pygame.Rect(x, y, w, h)):
+                        occupied_positions.add(pos)
+            
+            # Get available positions
+            available_positions = [pos for pos in grid_positions if pos not in occupied_positions]
+            
+            if not available_positions:
+                return
+            
+            # Shuffle available positions
+            random.shuffle(available_positions)
+            
+            # Place obstacles in available positions
+            for i, pos in enumerate(available_positions):
+                if i >= count:
                     break
+                
+                x, y, width, height = pos
+                
+                if obstacle_type == 'building':
+                    variations = {
+                        'width': width // 16,
+                        'height': random.randint(min_size+2, max_size+4),
+                        'base_height': height
+                    }
+                    new_obstacle = Building(x, y, variations)
+                    new_obstacle.game = self.game
+                    self.obstacles.append(new_obstacle)
+                    
+                elif obstacle_type == 'park':
+                    variations = {
+                        'width': width // 16,
+                        'height': (height + 12) // 12  # Add one unit to ensure full coverage
+                    }
+                    new_obstacle = Park(x, y, variations)
+                    self.obstacles.append(new_obstacle)
+        else:
+            attempts = 0
+            initial_count = len(self.obstacles)  # Keep this for proper counting
             
-            if not collision:
-                self.obstacles.append(new_obstacle)
-                placed += 1
-            
-            attempts += 1
-        
-        if attempts >= max_attempts:
-            print(f"Warning: Could only place {placed}/{count} {obstacle_type}s after {max_attempts} attempts")
+            while len(self.obstacles) < initial_count + count:
+                x = round(random.randrange(0, self.game.width - self.block_size) / self.block_size) * self.block_size
+                y = round(random.randrange(self.play_area['top'], self.play_area['bottom'] - self.block_size) / self.block_size) * self.block_size
+                
+                # Create the obstacle based on type
+                if obstacle_type == 'cactus':
+                    variations = {
+                        'height': random.randint(3, 5),
+                        'arm_height': random.randint(1, 2),
+                        'has_second_arm': random.random() > 0.5,
+                        'arm_direction': random.choice([-1, 1])
+                    }
+                    new_obstacle = Cactus(x, y, variations)
+                elif obstacle_type == 'tree':
+                    height = random.randint(min_size, max_size)
+                    width = random.randint(min_size-1, max_size-1)
+                    variations = {
+                        'height': height,
+                        'width': width,
+                    }
+                    for i in range(4):
+                        variations[f'section_{i}_width'] = random.randint(-8, 8)
+                        variations[f'section_{i}_offset'] = random.randint(-4, 4)
+                    new_obstacle = Tree(x, y, variations)
+                elif obstacle_type == 'bush':
+                    variations = {
+                        'size': random.randint(min_size, max_size)
+                    }
+                    new_obstacle = Bush(x, y, variations)
+                elif obstacle_type == 'pond':
+                    variations = {
+                        'width': random.randint(min_size, max_size),
+                        'height': random.randint(min_size-1, max_size-1)
+                    }
+                    new_obstacle = Pond(x, y, variations)
+                else:
+                    continue
+                
+                # Check for collisions with existing obstacles
+                collision = False
+                new_hitbox = new_obstacle.get_hitbox()
+                for existing_obstacle in self.obstacles:
+                    padding = self.block_size
+                    padded_hitbox = new_hitbox.inflate(padding, padding)
+                    if padded_hitbox.colliderect(existing_obstacle.get_hitbox()):
+                        collision = True
+                        break
+                
+                if not collision:
+                    self.obstacles.append(new_obstacle)
+                
+                attempts += 1
     
     def spawn_food(self):
         while True:
@@ -241,14 +292,41 @@ class BaseLevel:
         return self.food_count >= self.required_food
     
     def draw(self, surface):
-        # Draw background and all level elements
+        # Draw background
         self.draw_background(surface)
-        for obstacle in self.obstacles:
-            obstacle.draw(surface)
+
+        if self.level_data['biome'] == 'city':
+            # Draw all non-building obstacles
+            for obstacle in self.obstacles:
+                if not isinstance(obstacle, Building):
+                    obstacle.draw(surface)
+            
+            # Draw building bases
+            for building in [obs for obs in self.obstacles if isinstance(obs, Building)]:
+                building.draw_base(surface)
+            
+            # Draw snake ONLY if it's not behind any building tops
+            snake_is_behind = False
+            for building in [obs for obs in self.obstacles if isinstance(obs, Building)]:
+                if building.is_snake_behind(self.game.snake):
+                    snake_is_behind = True
+                    break
+            
+            if not snake_is_behind:
+                self.game.snake.draw(surface)
+            
+            # Draw building tops (always over snake)
+            for building in [obs for obs in self.obstacles if isinstance(obs, Building)]:
+                building.draw_top(surface)
+        else:
+            # Original drawing order for forest/desert
+            for obstacle in self.obstacles:
+                obstacle.draw(surface)
+            self.game.snake.draw(surface)
+
+        # Draw food and cutscene
         if self.food:
             self.food.draw(surface)
-        
-        # Draw cutscene if active
         if self.current_cutscene:
             self.current_cutscene.draw(surface)
     
@@ -256,24 +334,67 @@ class BaseLevel:
         # Draw sky using sky manager
         self.sky_manager.draw(surface)
         
-        # Draw ground
-        ground_colors = self.level_data['background_colors']['ground']
-        ground_height = self.play_area['bottom'] - self.play_area['top']
+        # Special handling for city biome
+        if self.level_data['biome'] == 'city':
+            self._draw_city_background(surface)
+        else:
+            # Original background drawing for desert/forest
+            ground_colors = self.level_data['background_colors']['ground']
+            ground_height = self.play_area['bottom'] - self.play_area['top']
+            
+            # First fill with base color
+            pygame.draw.rect(surface, ground_colors[-1],
+                            [0, self.play_area['top'], 
+                             self.game.width, ground_height])
+            
+            # Draw pixelated ground pattern
+            block_size = 8
+            for y in range(self.play_area['top'], self.play_area['bottom'], block_size):
+                for x in range(0, self.game.width, block_size):
+                    offset = int(10 * math.sin(x * 0.02))
+                    if y + offset > self.play_area['top']:
+                        color_index = int((y + offset - self.play_area['top']) / 50) % len(ground_colors)
+                        pygame.draw.rect(surface, ground_colors[color_index],
+                                       [x, y + offset, block_size, block_size])
+
+    def _draw_city_background(self, surface):
+        # Get colors from level data
+        road_colors = self.level_data['background_colors']['ground']
+        road_line_color = self.level_data['background_colors']['road_lines']
         
-        # First fill with base color
-        pygame.draw.rect(surface, ground_colors[-1],
-                        [0, self.play_area['top'], 
-                         self.game.width, ground_height])
+        # Fill background with base road color
+        pygame.draw.rect(surface, road_colors[0],
+                        [0, self.play_area['top'],
+                         self.game.width, self.play_area['bottom'] - self.play_area['top']])
         
-        # Draw pixelated ground pattern
-        block_size = 8
-        for y in range(self.play_area['top'], self.play_area['bottom'], block_size):
-            for x in range(0, self.game.width, block_size):
-                offset = int(10 * math.sin(x * 0.02))
-                if y + offset > self.play_area['top']:
-                    color_index = int((y + offset - self.play_area['top']) / 50) % len(ground_colors)
-                    pygame.draw.rect(surface, ground_colors[color_index],
-                                   [x, y + offset, block_size, block_size]) 
+        # Draw grid of roads
+        block_size = 120  # Larger city blocks
+        road_width = 40   # Wider roads
+        
+        # Draw vertical roads first (they'll be "under" horizontal roads)
+        for x in range(0, self.game.width + block_size, block_size):
+            # Road
+            pygame.draw.rect(surface, road_colors[1],
+                            [x - road_width//2, self.play_area['top'],
+                             road_width, self.play_area['bottom'] - self.play_area['top']])
+            
+            # Dashed white lines
+            center_x = x - 2  # Center line
+            for y in range(self.play_area['top'], self.play_area['bottom'], 30):
+                pygame.draw.rect(surface, road_line_color,
+                               [center_x, y, 4, 20])
+        
+        # Draw horizontal roads
+        for y in range(self.play_area['top'], self.play_area['bottom'] + block_size, block_size):
+            # Road
+            pygame.draw.rect(surface, road_colors[1],
+                            [0, y - road_width//2,
+                             self.game.width, road_width])
+            
+            # Dashed white lines
+            for x in range(0, self.game.width, 30):
+                pygame.draw.rect(surface, road_line_color,
+                               [x, y - 2, 20, 4])
     
     def update(self):
         # Update cutscene if active
