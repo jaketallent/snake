@@ -211,4 +211,15 @@ class SkyManager:
     def update(self):
         """Update cloud positions"""
         for cloud in self.clouds:
-            cloud.update(self.width) 
+            cloud.update(self.width)
+    
+    def get_sky_height(self):
+        """Return the height where the sky meets the ground"""
+        # Calculate where the gradient actually ends
+        gradient_height = self.height // 3 - self.top
+        return gradient_height + self.top  # Add self.top since gradient starts there
+        
+        # TODO: In the future, we could calculate this dynamically based on:
+        # - Time of day (sun/moon position)
+        # - Background gradients
+        # - Biome-specific settings 

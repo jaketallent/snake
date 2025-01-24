@@ -227,6 +227,29 @@ LEVELS = [
                 (70, 70, 70)     # Light road
             ],
             'road_lines': (255, 255, 255),  # White road lines
+            'building_styles': {
+                'concrete': {
+                    'base': (100, 100, 100),     # Light gray
+                    'top': (80, 80, 80),         # Darker gray
+                    'windows': (200, 200, 100),   # Warm glow
+                    'entrance': (60, 60, 60),     # Dark entrance
+                    'trim': (90, 90, 90)         # Medium gray
+                },
+                'brick': {
+                    'base': (140, 80, 70),       # Reddish brown
+                    'top': (120, 70, 60),        # Darker brick
+                    'windows': (200, 200, 150),   # Warm glow
+                    'entrance': (50, 40, 35),     # Dark entrance
+                    'trim': (80, 60, 50)         # Dark brick trim
+                },
+                'glass': {
+                    'base': (150, 180, 200),     # Light blue glass
+                    'top': (130, 160, 180),      # Darker blue glass
+                    'windows': (220, 230, 255),   # Bright reflection
+                    'entrance': (100, 120, 140),  # Dark glass
+                    'trim': (180, 200, 220)      # Light trim
+                }
+            },
             'park_colors': [
                 (34, 139, 34),   # Forest green
                 (0, 100, 0),     # Dark green
@@ -236,20 +259,26 @@ LEVELS = [
         'obstacles': [
             {
                 'type': 'building',
-                'count': 6,
+                'count': 999,
                 'min_size': 4,
                 'max_size': 8
             },
             {
                 'type': 'park',
-                'count': 2,
+                'count': 999,
+                'min_size': 2,
+                'max_size': 4
+            },
+            {
+                'type': 'lake',
+                'count': 999,
                 'min_size': 2,
                 'max_size': 4
             }
         ],
         'critters': CITY_CRITTERS,
         'required_food': 8,
-        'play_area': {'top': 150, 'bottom': 600},
+        'play_area': {'top': 135, 'bottom': 600},
         'cutscenes': {
             'intro': 'city_intro'
         }
