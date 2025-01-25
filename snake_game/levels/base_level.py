@@ -345,39 +345,48 @@ class BaseLevel:
         return self.food_count >= self.required_food
     
     def draw(self, surface):
-        # Draw background
+        # Draw sky, etc. first
         self.draw_background(surface)
 
         if self.level_data['biome'] == 'city':
-            # Draw all non-building obstacles
+            # 1) Draw all non-building obstacles
             for obstacle in self.obstacles:
                 if not isinstance(obstacle, Building):
                     obstacle.draw(surface)
-            
-            # Draw building bases
+
+            # 2) Draw only the "base" portion for each building unless it is being destroyed
             for building in [obs for obs in self.obstacles if isinstance(obs, Building)]:
-                building.draw_base(surface)
-            
-            # Draw snake ONLY if it's not behind any building tops
+                if building.is_being_destroyed:
+                    # Draw entire building (will show explosion)
+                    building.draw(surface)
+                else:
+                    # Just draw base portion
+                    building.draw_base(surface)
+
+            # 3) Draw the snake IF it's not behind a building
             snake_is_behind = False
             for building in [obs for obs in self.obstacles if isinstance(obs, Building)]:
                 if building.is_snake_behind(self.game.snake):
                     snake_is_behind = True
                     break
-            
             if not snake_is_behind:
                 self.game.snake.draw(surface)
-            
-            # Draw building tops (always over snake)
+
+            # 4) Finally, draw the building "tops" if they're not being destroyed
             for building in [obs for obs in self.obstacles if isinstance(obs, Building)]:
-                building.draw_top(surface)
+                if building.is_being_destroyed:
+                    # Already drawn the explosions, so skip top
+                    continue
+                else:
+                    building.draw_top(surface)
+
         else:
-            # Original drawing order for forest/desert
+            # Original logic for desert, forest, etc.
             for obstacle in self.obstacles:
                 obstacle.draw(surface)
             self.game.snake.draw(surface)
 
-        # Draw food and cutscene
+        # Draw food and cutscene after
         if self.food:
             self.food.draw(surface)
         if self.current_cutscene:

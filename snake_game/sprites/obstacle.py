@@ -189,7 +189,29 @@ class Obstacle:
         return pygame.Rect(self.x, self.y, self.block_size, self.block_size)
     
     def draw(self, surface):
+        # If we're in destruction or discharge, call the effect
+        if self.is_being_destroyed and self.can_be_destroyed:
+            pixels = self.get_destruction_pixels()
+            self.draw_destruction_effect(surface, pixels)
+        elif self.is_discharging and not self.can_be_destroyed:
+            # Some obstacles (like Lake/Pond) only discharge
+            self.draw_discharge_effect(surface)
+        else:
+            # Normal drawing for everything else
+            self.draw_normal(surface)
+
+    def draw_normal(self, surface):
+        """
+        Draw normal obstacle; override in child class
+        """
         pass
+
+    def get_destruction_pixels(self):
+        """
+        Return a list of (x, y, w, h) "pixels"
+        for the explosion. Override per obstacle.
+        """
+        return []
 
 class Tree(Obstacle):
     def get_custom_hitbox(self):
@@ -200,7 +222,7 @@ class Tree(Obstacle):
         x = self.x - (width - self.block_size) // 2
         return pygame.Rect(x, self.y, width, height)
     
-    def draw(self, surface):
+    def draw_normal(self, surface):
         if self.is_being_destroyed:
             # Collect all pixels that make up the tree
             pixels = []
@@ -277,8 +299,38 @@ class Tree(Obstacle):
                                [section_x, leaf_start_y + (i * section_height),
                                 section_width, section_height])
 
+    def get_destruction_pixels(self):
+        # Collect all pixels that make up the tree
+        pixels = []
+        height = int(self.variations['height'] * 24)  # Convert to int
+        width = int(self.variations['width'] * 16)    # Convert to int
+        trunk_width = max(16, width // 3)
+        
+        # Trunk pixels
+        for y in range(height):
+            pixels.append((self.x, self.y + y, trunk_width, 1))
+        
+        # Leaf pixels
+        leaf_sections = 4
+        leaf_height = int(height * 0.7)  # Convert to int
+        leaf_start_y = self.y
+        
+        for i in range(leaf_sections):
+            section_width = int(width - (i * width // (leaf_sections * 2)))  # Convert to int
+            section_width += self.variations.get(f'section_{i}_width', 0)
+            section_x = self.x + (trunk_width - section_width) // 2
+            section_height = leaf_height // leaf_sections
+            offset_x = self.variations.get(f'section_{i}_offset', 0)
+            section_x += offset_x
+            
+            for y in range(int(section_height)):  # Convert to int
+                pixels.append((section_x, leaf_start_y + (i * section_height) + y,
+                             section_width, 1))
+        
+        return pixels
+
 class Cactus(Obstacle):
-    def draw(self, surface):
+    def draw_normal(self, surface):
         if self.is_being_destroyed:
             # Collect pixels in larger chunks
             pixels = []
@@ -339,8 +391,18 @@ class Cactus(Obstacle):
                                    [self.x + pixel_size, second_arm_y,
                                     pixel_size * 2, pixel_size])
 
+    def get_destruction_pixels(self):
+        pixels = []
+        pixel_size = 4
+        height = self.variations['height'] * 8
+        width = pixel_size * 4
+        for y in range(0, height, pixel_size):
+            pixels.append((self.x, self.y + y, width, pixel_size))
+        # arms, etc.
+        return pixels
+
 class Bush(Obstacle):
-    def draw(self, surface):
+    def draw_normal(self, surface):
         if self.is_being_destroyed:
             # Collect all pixels that make up the bush
             pixels = []
@@ -397,12 +459,37 @@ class Bush(Obstacle):
                         pygame.draw.rect(surface, color,
                                        [px, py, pixel_size, pixel_size])
 
+    def get_destruction_pixels(self):
+        # Collect all pixels that make up the bush
+        pixels = []
+        size = self.variations['size'] * 8
+        pixel_size = 4
+        
+        # Base layer
+        base_width = size * 1.5
+        base_height = size
+        base_x = self.x + (size - base_width) // 2
+        base_y = self.y + size // 2
+        
+        for y in range(int(base_height)):
+            pixels.append((base_x, base_y + y, base_width, pixel_size))
+        
+        # Middle layer
+        for y in range(size):
+            pixels.append((self.x, self.y + size//4 + y, size, pixel_size))
+        
+        # Top layer
+        for y in range(size//2):
+            pixels.append((self.x + size//4, self.y + y, size//2, pixel_size))
+        
+        return pixels
+
 class Pond(Obstacle):
     def __init__(self, x, y, variations, block_size=20):
         super().__init__(x, y, variations, block_size)
         self.can_be_destroyed = False  # Ponds can't be destroyed
     
-    def draw(self, surface):
+    def draw_normal(self, surface):
         if self.is_discharging:
             self.draw_discharge_effect(surface)
         else:
@@ -445,18 +532,19 @@ class Pond(Obstacle):
 class Building(Obstacle):
     def __init__(self, x, y, variations, block_size=20):
         super().__init__(x, y, variations, block_size)
-        # Initialize window states and rooftop objects
         self.window_states = {}
         self.window_timer = 0
         self.window_change_delay = 60
-        
-        # Store the full height for collision detection
-        self.full_height = variations['height'] * 24
-        self.base_height = variations['base_height']
-        
-        # Generate and store rooftop objects
+
         width = variations['width'] * 16
+        self.base_height = variations['base_height']
+        self.full_height = variations['height'] * 24
+
+        # Generate and store rooftop objects
         self.rooftop_objects = self._generate_rooftop_objects(width)
+        
+        # Make City Buildings destroyable, same as cacti/trees:
+        self.can_be_destroyed = True
     
     def _generate_rooftop_objects(self, width):
         objects = []
@@ -495,6 +583,10 @@ class Building(Obstacle):
         total_height = self.variations['height'] * 24
         return self.y + total_height
 
+    def draw_normal(self, surface):
+        self.draw_base(surface)
+        self.draw_top(surface)
+
     def draw_base(self, surface):
         # Use colors from variations if available, otherwise use defaults
         colors = self.variations.get('colors', {
@@ -530,9 +622,16 @@ class Building(Obstacle):
         )
 
     def draw(self, surface):
-        # For non-city biomes or fallback
-        self.draw_base(surface)
-        self.draw_top(surface)
+        # If we're in destruction or discharge, call the effect
+        if self.is_being_destroyed and self.can_be_destroyed:
+            pixels = self.get_destruction_pixels()
+            self.draw_destruction_effect(surface, pixels)
+        elif self.is_discharging and not self.can_be_destroyed:
+            # Some obstacles (like Lake/Pond) only discharge
+            self.draw_discharge_effect(surface)
+        else:
+            # Normal drawing for everything else
+            self.draw_normal(surface)
 
     def _draw_building_section(self, surface, colors, x, y, width, height):
         # Update window states every window_change_delay frames
@@ -733,20 +832,17 @@ class Building(Obstacle):
                                (x + width - 4, y + row - 2),
                                1)
     
-    def get_hitbox(self):
+    def get_destruction_pixels(self):
+        """
+        2) Return pixels covering the entire building (top + base).
+           That way, destroying the base triggers a full building explosion.
+        """
         width = self.variations['width'] * 16
-        # Use only the base height for collision instead of the full height:
-        collision_height = self.base_height
+        total_height = self.variations['height'] * 24
         
-        hitbox = pygame.Rect(self.x, self.y, width, collision_height)
-        
-        if hasattr(self, 'game') and self.game and hasattr(self.game, 'current_level'):
-            play_bottom = self.game.current_level.play_area['bottom']
-            # If this is a bottom row building, extend the hitbox only as far as the ground
-            if abs(self.y + collision_height - play_bottom) < 50:
-                hitbox.height = play_bottom - self.y
-        
-        return hitbox
+        # top_y is the building's uppermost point
+        top_y = self.y - (total_height - self.base_height)
+        return [(self.x, top_y, width, total_height)]
 
     def is_snake_behind(self, snake):
         """Check if the snake is behind this building's top section"""
@@ -764,6 +860,14 @@ class Building(Obstacle):
         )
         
         return snake_rect.colliderect(building_rect)
+
+    def get_hitbox(self):
+        """
+        1) Return only the base rectangle so the top is never collidable.
+        """
+        width = self.variations['width'] * 16
+        base_height = self.base_height  # The bottom portion
+        return pygame.Rect(self.x, self.y, width, base_height)
 
 class Park(Obstacle):
     def __init__(self, x, y, variations, block_size=20):
@@ -827,7 +931,7 @@ class Park(Obstacle):
                     'size': random.randint(14, 18)  # Slightly bigger trees
                 })
 
-    def draw(self, surface):
+    def draw_normal(self, surface):
         width = self.variations['width'] * 16
         height = self.variations['height'] * 12
         
@@ -909,43 +1013,54 @@ class Park(Obstacle):
         return None
 
 class Lake(Obstacle):
-    def draw(self, surface):
-        width = self.variations['width'] * 16
-        height = self.variations['height'] * 12
-        
-        # Draw base grass border
-        grass_colors = [(34, 139, 34), (0, 100, 0)]
-        pygame.draw.rect(surface, grass_colors[0],
-                        [self.x, self.y, width, height])
-        
-        # Animated water with multiple layers
-        water_colors = [
-            (65, 105, 225),   # Royal blue
-            (30, 144, 255),   # Dodger blue
-            (135, 206, 235),  # Sky blue
-        ]
-        margin = 8
-        
-        # Draw water layers with animated edges
-        for i, color in enumerate(reversed(water_colors)):
-            shrink = i * 4
-            water_rect = [
-                self.x + margin + shrink,
-                self.y + margin + shrink,
-                width - (margin + shrink) * 2,
-                height - (margin + shrink) * 2
-            ]
+    def __init__(self, x, y, variations, block_size=20):
+        super().__init__(x, y, variations, block_size)
+        # --------------------------------------------------
+        # Make lakes discharge instead of being destroyed
+        self.can_be_destroyed = False
+        # --------------------------------------------------
+
+    def draw_normal(self, surface):
+        if self.is_discharging:
+            self.draw_discharge_effect(surface)
+        else:
+            width = self.variations['width'] * 16
+            height = self.variations['height'] * 12
             
-            # Draw water with pixelated edges
-            for px in range(int(water_rect[0]), int(water_rect[0] + water_rect[2]), 4):
-                for py in range(int(water_rect[1]), int(water_rect[1] + water_rect[3]), 4):
-                    if (px == water_rect[0] or 
-                        px >= water_rect[0] + water_rect[2] - 4 or
-                        py == water_rect[1] or 
-                        py >= water_rect[1] + water_rect[3] - 4):
-                        if random.random() > 0.7:  # Animated edges
-                            continue
-                    pygame.draw.rect(surface, color, [px, py, 4, 4]) 
+            # Draw base grass border
+            grass_colors = [(34, 139, 34), (0, 100, 0)]
+            pygame.draw.rect(surface, grass_colors[0],
+                            [self.x, self.y, width, height])
+            
+            # Animated water with multiple layers
+            water_colors = [
+                (65, 105, 225),   # Royal blue
+                (30, 144, 255),   # Dodger blue
+                (135, 206, 235),  # Sky blue
+            ]
+            margin = 8
+            
+            # Draw water layers with animated edges
+            for i, color in enumerate(reversed(water_colors)):
+                shrink = i * 4
+                water_rect = [
+                    self.x + margin + shrink,
+                    self.y + margin + shrink,
+                    width - (margin + shrink) * 2,
+                    height - (margin + shrink) * 2
+                ]
+                
+                # Draw water with pixelated edges
+                for px in range(int(water_rect[0]), int(water_rect[0] + water_rect[2]), 4):
+                    for py in range(int(water_rect[1]), int(water_rect[1] + water_rect[3]), 4):
+                        if (px == water_rect[0] or 
+                            px >= water_rect[0] + water_rect[2] - 4 or
+                            py == water_rect[1] or 
+                            py >= water_rect[1] + water_rect[3] - 4):
+                            if random.random() > 0.7:  # Animated edges
+                                continue
+                        pygame.draw.rect(surface, color, [px, py, 4, 4]) 
+        # --------------------------------------------------
 
     def get_hitbox(self):
         width = self.variations['width'] * 16

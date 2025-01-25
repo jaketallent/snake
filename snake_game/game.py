@@ -7,6 +7,11 @@ from sprites.snake import Snake
 from menu import MainMenu, LevelSelectMenu
 from audio.music_manager import MusicManager
 
+################################################################################
+# Developer/Debug toggle
+DEV_MODE = True  # Set to False to disable dev features
+################################################################################
+
 class Game:
     def __init__(self):
         pygame.init()
@@ -143,13 +148,17 @@ class Game:
                     return "quit"
                 
                 if event.type == pygame.KEYDOWN:
-                    # Always check for ESC key first
                     if event.key == pygame.K_ESCAPE:
                         # Clear all game states
                         self.current_level.current_cutscene = None
                         game_close = False
                         game_over = False
                         return "menu"
+                    
+                    # Developer feature: SHIFT+P toggles power-up
+                    if DEV_MODE and (event.mod & pygame.KMOD_SHIFT) and event.key == pygame.K_p:
+                        self.snake.is_powered_up = not self.snake.is_powered_up
+                        self.snake.power_up_timer = 0  # Reset its timer
                     
                     # Handle other input based on game state
                     if self.current_level.current_cutscene:
