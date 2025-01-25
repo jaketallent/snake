@@ -149,11 +149,16 @@ class Game:
                 
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
-                        # Clear all game states
-                        self.current_level.current_cutscene = None
-                        game_close = False
-                        game_over = False
-                        return "menu"
+                        if self.current_level.current_cutscene:
+                            # NEW: Skip the current cutscene
+                            self.current_level.current_cutscene = None
+                            self.current_level.start_gameplay()
+                        else:
+                            # existing logic for returning to menu
+                            self.current_level.current_cutscene = None
+                            game_close = False
+                            game_over = False
+                            return "menu"
                     
                     # Developer feature: SHIFT+P toggles power-up
                     if DEV_MODE and (event.mod & pygame.KMOD_SHIFT) and event.key == pygame.K_p:
@@ -281,26 +286,32 @@ class Game:
         # Use the initialized font
         font = self.font
         
-        # Draw level name (using display_name instead of full name)
+        # Draw level name
         level_text = f"Level: {self.current_level.display_name}"
         level_surface = font.render(level_text, True, (255, 255, 255))
         level_rect = level_surface.get_rect(topleft=(10, 10))
         
-        # Add a semi-transparent background for better readability
+        # Semi-transparent background for the level text
         padding = 5
         bg_rect = level_rect.inflate(padding * 2, padding * 2)
         bg_surface = pygame.Surface(bg_rect.size, pygame.SRCALPHA)
         pygame.draw.rect(bg_surface, (0, 0, 0, 128), bg_surface.get_rect())
         self.window.blit(bg_surface, bg_rect)
         self.window.blit(level_surface, level_rect)
-        
-        # >>> NEW: show building destruction count in city, otherwise show food
+
+        # NEW: Faint "Press ESC to skip" if a cutscene exists
+        if self.current_level.current_cutscene:
+            skip_text = "ESC = Skip"
+            skip_surface = font.render(skip_text, True, (160, 160, 160))
+            skip_rect = skip_surface.get_rect(topleft=(10, level_rect.bottom + 10))
+            self.window.blit(skip_surface, skip_rect)
+
+        # Show Buildings or Food
         if self.current_level.level_data['biome'] == 'city':
             score_text = f"Buildings: {self.current_level.buildings_destroyed}/{self.current_level.required_buildings}"
         else:
             score_text = f"Food: {self.current_level.food_count}/{self.current_level.required_food}"
-        # <<< end NEW
-        
+
         score_surface = font.render(score_text, True, (255, 255, 255))
         score_rect = score_surface.get_rect(topright=(self.width - 10, 10))
         
