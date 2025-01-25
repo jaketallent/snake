@@ -19,6 +19,10 @@ class BaseLevel:
         self.required_food = level_data.get('required_food', 5)
         self.block_size = 20
         
+        # Track building destruction separately for city
+        self.buildings_destroyed = 0
+        self.required_buildings = 0
+        
         # Create sky manager first so we can use it to determine play area
         biome = level_data['biome']
         if time_of_day is None:
@@ -164,6 +168,10 @@ class BaseLevel:
                     new_obstacle = Building(x, y, variations)
                     new_obstacle.game = self.game
                     self.obstacles.append(new_obstacle)
+
+                # >>> NEW: set required_buildings to however many buildings we placed
+                self.required_buildings += len(self.building_positions)
+                # <<< end NEW
             
             elif obstacle_type == 'park':
                 for x, y, width, height in self.park_positions:
@@ -342,7 +350,10 @@ class BaseLevel:
         return False
     
     def is_complete(self):
-        return self.food_count >= self.required_food
+        if self.level_data['biome'] == 'city':
+            return self.buildings_destroyed >= self.required_buildings
+        else:
+            return self.food_count >= self.required_food
     
     def draw(self, surface):
         # Draw sky, etc. first
@@ -468,8 +479,12 @@ class BaseLevel:
         # Update all obstacles
         for obs in self.obstacles[:]:  # iterate over a copy, so we can remove
             if obs.update_destruction():
-                # Only remove if it was destroyed (not discharged)
                 if obs.is_being_destroyed and obs.can_be_destroyed:
+                    # >>> NEW: If this is a city building, increment buildings_destroyed
+                    if self.level_data['biome'] == 'city' and isinstance(obs, Building):
+                        self.buildings_destroyed += 1
+                    # <<< end NEW
+                    
                     # If it's a building in the city, spawn rubble
                     if isinstance(obs, Building) and self.level_data['biome'] == 'city':
                         # Create rubble with same dimensions as building
