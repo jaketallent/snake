@@ -735,17 +735,15 @@ class Building(Obstacle):
     
     def get_hitbox(self):
         width = self.variations['width'] * 16
-        # For collision purposes, use the maximum of either the base_height or full_height
-        collision_height = max(self.base_height, self.full_height)
+        # Use only the base height for collision instead of the full height:
+        collision_height = self.base_height
         
-        # Create hitbox
         hitbox = pygame.Rect(self.x, self.y, width, collision_height)
         
-        # Get the play area bottom from the game instance
         if hasattr(self, 'game') and self.game and hasattr(self.game, 'current_level'):
             play_bottom = self.game.current_level.play_area['bottom']
-            # If this is a bottom row building, extend hitbox to play area bottom
-            if abs(self.y + collision_height - play_bottom) < 50:  # If we're close to the bottom
+            # If this is a bottom row building, extend the hitbox only as far as the ground
+            if abs(self.y + collision_height - play_bottom) < 50:
                 hitbox.height = play_bottom - self.y
         
         return hitbox
