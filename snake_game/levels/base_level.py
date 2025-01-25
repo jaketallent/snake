@@ -247,44 +247,61 @@ class BaseLevel:
                 attempts += 1
     
     def spawn_food(self):
-        """
-        Modified to ensure the food is placed in a location the snake can actually reach.
-        We do up to 100 attempts; if BFS fails to find a path, we keep trying.
-        """
         max_attempts = 100
         for attempt in range(max_attempts):
             x = round(random.randrange(0, self.game.width - self.block_size) / self.block_size) * self.block_size
             y = round(random.randrange(self.play_area['top'], self.play_area['bottom'] - self.block_size) / self.block_size) * self.block_size
 
-            # If it's the city biome, snap further or do additional checks if desired:
+            # Snap to the city grid if needed
             if self.level_data['biome'] == 'city':
                 x = round(x / self.block_size) * self.block_size
                 y = round(y / self.block_size) * self.block_size
 
-            if self.is_safe_position(x, y) and self.is_reachable_by_snake(x, y):
-                # We found a valid, reachable position for food
-                self.food = Food(x, y, random.choice(self.level_data['critters']))
-                return
-        
-        # If we exhausted attempts, just give up and spawn at a fallback (e.g. center)
+            # 1) Check standard collisions & BFS reachability
+            if not self.is_safe_position(x, y):
+                continue
+            if not self.is_reachable_by_snake(x, y):
+                continue
+
+            # 2) If we're in the city, also skip if this position sits on a building top
+            if self.level_data['biome'] == 'city' and self._overlaps_building_top(x, y):
+                continue
+
+            # If all checks passed, spawn the food
+            self.food = Food(x, y, random.choice(self.level_data['critters']))
+            return
+
+        # If we exhausted attempts, fallback to center
         fallback_x = self.game.width // 2
         fallback_y = (self.play_area['top'] + self.play_area['bottom']) // 2
         self.food = Food(fallback_x, fallback_y, random.choice(self.level_data['critters']))
 
+    def _overlaps_building_top(self, x, y):
+        """
+        Checks if the 1-tile food at (x,y) overlaps any building's top rectangle.
+        """
+        food_rect = pygame.Rect(x, y, self.block_size, self.block_size)
+        for obs in self.obstacles:
+            if isinstance(obs, Building):
+                top_rect = obs.get_top_bounding_rect()
+                if food_rect.colliderect(top_rect):
+                    return True
+        return False
+
     def is_safe_position(self, x, y):
         """
         Check if a position is free of collisions with obstacles or snake segments.
-        We also skip positions that intersect obstacles in any way.
+        Now we simply loop each obstacle's 'no spawn' rects so we skip them.
         """
         food_rect = pygame.Rect(x, y, self.block_size, self.block_size)
         
-        # Check collision with obstacles
+        # 1) Check each obstacle's no-spawn rects
         for obstacle in self.obstacles:
-            hitbox = obstacle.get_hitbox()
-            if hitbox is not None and food_rect.colliderect(hitbox):
-                return False
-        
-        # Check collision with snake's body
+            for blocked_rect in obstacle.get_no_spawn_rects():
+                if food_rect.colliderect(blocked_rect):
+                    return False
+
+        # 2) Optionally check collision with snake's body if you don't want to spawn on snake
         if self.game.snake:
             for segment in self.game.snake.body:
                 segment_rect = pygame.Rect(segment[0], segment[1], 

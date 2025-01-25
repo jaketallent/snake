@@ -213,6 +213,17 @@ class Obstacle:
         """
         return []
 
+    def get_no_spawn_rects(self):
+        """
+        By default, return the hitbox if it exists. 
+        Subclasses can override or extend this to add additional "blocked" areas.
+        """
+        rects = []
+        hb = self.get_hitbox()
+        if hb is not None:
+            rects.append(hb)
+        return rects
+
 class Tree(Obstacle):
     def get_custom_hitbox(self):
         # Wider hitbox for larger trees
@@ -601,6 +612,7 @@ class Building(Obstacle):
         self._draw_building_section(surface, colors, self.x, self.y, width, base_height)
 
     def draw_top(self, surface):
+        """Draw the building's top portion."""
         # Use same colors from variations
         colors = self.variations.get('colors', {
             'base': (128, 128, 128),
@@ -612,6 +624,8 @@ class Building(Obstacle):
         width = self.variations['width'] * 16
         total_height = self.variations['height'] * 24
         base_height = self.variations['base_height']
+        
+        # Draw the actual building top
         self._draw_building_section(
             surface,
             colors,
@@ -871,6 +885,35 @@ class Building(Obstacle):
         base_height = self.base_height  # The bottom portion
         return pygame.Rect(self.x, self.y, width, base_height)
 
+    def get_top_bounding_rect(self):
+        """Returns the pygame.Rect covering the building's top section."""
+        width = self.variations['width'] * 16
+        total_height = self.variations['height'] * 24
+        base_height = self.variations['base_height']
+        
+        # Use the exact same coordinates as draw_top() uses
+        return pygame.Rect(
+            self.x,                                     # same x as base
+            self.y - (total_height - base_height),      # same calculation as draw_top
+            width,                                      # same width as base
+            total_height - base_height                  # same height calculation as draw_top
+        )
+
+    def get_no_spawn_rects(self):
+        """
+        Return both the base hitbox and the top bounding rect so that 
+        food cannot spawn behind or on the building top.
+        """
+        rects = []
+        base_rect = self.get_hitbox()
+        if base_rect is not None:
+            rects.append(base_rect)
+
+        top_rect = self.get_top_bounding_rect()
+        rects.append(top_rect)
+
+        return rects
+
 class Park(Obstacle):
     def __init__(self, x, y, variations, block_size=20):
         super().__init__(x, y, variations, block_size)
@@ -1079,6 +1122,16 @@ class Lake(Obstacle):
                 hitbox.height = play_bottom - self.y
         
         return hitbox 
+
+    def get_no_spawn_rects(self):
+        """
+        Return a bounding rect covering the entire lake surface.
+        """
+        rects = []
+        water_hitbox = self.get_hitbox()  # or a custom water rect if needed
+        if water_hitbox is not None:
+            rects.append(water_hitbox)
+        return rects
 
 class Rubble(Obstacle):
     def __init__(self, x, y, variations, block_size=20):
