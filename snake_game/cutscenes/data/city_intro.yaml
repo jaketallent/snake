@@ -21,4 +21,19 @@ sequence:
       - ["snake_god_appear", true]
 
   - type: dialogue
-    text: "Lay waste to the townsfolk." 
+    text: "Alas, your foe was not hiding in the forest."
+
+  - type: dialogue
+    text: "He may have taken refuge in the mountains." 
+
+  - type: dialogue
+    text: "You must become a fearsome landworm to find him there." 
+
+  - type: dialogue
+    text: "Lay waste to these townsfolk, they who exterminate your kind." 
+
+  - type: dialogue
+    text: "Swallow their vehicles. Turn their buildings to ash." 
+
+  - type: dialogue
+    text: "This shall grant you the might you seek." 

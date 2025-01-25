@@ -847,18 +847,20 @@ class Building(Obstacle):
     def is_snake_behind(self, snake):
         """Check if the snake is behind this building's top section"""
         snake_rect = pygame.Rect(snake.x, snake.y, snake.block_size, snake.block_size)
+        
         total_height = self.variations['height'] * 24
         base_height = self.variations['base_height']
         width = self.variations['width'] * 16
-        
-        # Define the area where the snake should be considered "behind" the building
+
+        # Adjusted to start at self.y - total_height, covering the building's 
+        # entire upper section. The 'top' portion is total_height - base_height high.
         building_rect = pygame.Rect(
-            self.x,  # No padding needed
-            self.y - (total_height - base_height),  # Top section starts here
+            self.x,
+            self.y - total_height,
             width,
-            total_height - base_height  # Only check against top section height
+            total_height - base_height
         )
-        
+
         return snake_rect.colliderect(building_rect)
 
     def get_hitbox(self):

@@ -184,7 +184,6 @@ class Game:
             
             # Draw game state
             self.current_level.draw(self.window)
-            self.snake.draw(self.window)
             if self.current_level.current_cutscene:
                 self.current_level.current_cutscene.draw(self.window)
             self.draw_ui()
@@ -196,7 +195,6 @@ class Game:
                     # Wait for death animation to complete
                     for _ in range(self.snake.death_frames):
                         self.current_level.draw(self.window)
-                        self.snake.draw(self.window)
                         pygame.display.update()
                         self.clock.tick(60)
                 

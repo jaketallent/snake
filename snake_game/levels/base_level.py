@@ -247,16 +247,35 @@ class BaseLevel:
                 attempts += 1
     
     def spawn_food(self):
-        while True:
+        """
+        Modified to ensure the food is placed in a location the snake can actually reach.
+        We do up to 100 attempts; if BFS fails to find a path, we keep trying.
+        """
+        max_attempts = 100
+        for attempt in range(max_attempts):
             x = round(random.randrange(0, self.game.width - self.block_size) / self.block_size) * self.block_size
             y = round(random.randrange(self.play_area['top'], self.play_area['bottom'] - self.block_size) / self.block_size) * self.block_size
-            
-            if self.is_safe_position(x, y):
+
+            # If it's the city biome, snap further or do additional checks if desired:
+            if self.level_data['biome'] == 'city':
+                x = round(x / self.block_size) * self.block_size
+                y = round(y / self.block_size) * self.block_size
+
+            if self.is_safe_position(x, y) and self.is_reachable_by_snake(x, y):
+                # We found a valid, reachable position for food
                 self.food = Food(x, y, random.choice(self.level_data['critters']))
-                break
-    
+                return
+        
+        # If we exhausted attempts, just give up and spawn at a fallback (e.g. center)
+        fallback_x = self.game.width // 2
+        fallback_y = (self.play_area['top'] + self.play_area['bottom']) // 2
+        self.food = Food(fallback_x, fallback_y, random.choice(self.level_data['critters']))
+
     def is_safe_position(self, x, y):
-        """Check if a position is safe for food spawning"""
+        """
+        Check if a position is free of collisions with obstacles or snake segments.
+        We also skip positions that intersect obstacles in any way.
+        """
         food_rect = pygame.Rect(x, y, self.block_size, self.block_size)
         
         # Check collision with obstacles
@@ -265,21 +284,76 @@ class BaseLevel:
             if hitbox is not None and food_rect.colliderect(hitbox):
                 return False
         
-        # Check collision with snake
-        if self.game.snake:  # Make sure snake exists
+        # Check collision with snake's body
+        if self.game.snake:
             for segment in self.game.snake.body:
                 segment_rect = pygame.Rect(segment[0], segment[1], 
-                                         self.block_size, self.block_size)
+                                           self.block_size, self.block_size)
                 if food_rect.colliderect(segment_rect):
                     return False
         
         return True
+
+    def is_reachable_by_snake(self, food_x, food_y):
+        """
+        Do a simple BFS from the snake's current position to see if we can reach (food_x, food_y).
+        We move in steps of snake.block_size, ignoring cells blocked by obstacles.
+        If BFS succeeds, return True; otherwise return False.
+        """
+        snake = self.game.snake
+        if not snake:
+            return True  # If no snake for some reason, treat as reachable
+
+        start = (snake.x, snake.y)
+        goal = (food_x, food_y)
+
+        # Quick check: if same tile, we're good
+        if start == goal:
+            return True
+        
+        # Directions for up, down, left, right
+        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        visited = set()
+        queue = [start]
+
+        while queue:
+            cx, cy = queue.pop(0)
+            
+            for dx, dy in directions:
+                nx = cx + dx * snake.block_size
+                ny = cy + dy * snake.block_size
+                if (nx, ny) == goal:
+                    return True
+                
+                if (nx, ny) not in visited:
+                    # Check if within bounds
+                    if (0 <= nx < self.game.width and
+                        self.play_area['top'] <= ny < self.play_area['bottom']):
+                        
+                        # Check if we collide with an obstacle
+                        snake_rect = pygame.Rect(nx, ny, snake.block_size, snake.block_size)
+                        collision = False
+                        for obs in self.obstacles:
+                            hbox = obs.get_hitbox()
+                            if hbox and snake_rect.colliderect(hbox):
+                                collision = True
+                                break
+                        
+                        if not collision:
+                            visited.add((nx, ny))
+                            queue.append((nx, ny))
+
+        return False
     
     def check_collision(self, snake):
         new_x, new_y = snake.update()
         
+        # NEW: Snap first, then clamp
+        if self.level_data['biome'] == 'city':
+            new_x = round(new_x / snake.block_size) * snake.block_size
+            new_y = round(new_y / snake.block_size) * snake.block_size
+
         hit_wall = False
-        
         # Clamp X within bounds
         if new_x >= self.game.width - snake.block_size:
             new_x = self.game.width - snake.block_size
@@ -287,7 +361,7 @@ class BaseLevel:
         elif new_x < 0:
             new_x = 0
             hit_wall = True
-        
+
         # Clamp Y within play area
         if new_y >= self.play_area['bottom'] - snake.block_size:
             new_y = self.play_area['bottom'] - snake.block_size
@@ -296,9 +370,8 @@ class BaseLevel:
             new_y = self.play_area['top']
             hit_wall = True
 
-        # Move snake to clamped position first
         snake.move_to(new_x, new_y)
-        
+
         # Check obstacle collision - use the full snake rectangle
         snake_rect = pygame.Rect(new_x, new_y, snake.block_size, snake.block_size)
         
@@ -365,39 +438,31 @@ class BaseLevel:
                 if not isinstance(obstacle, Building):
                     obstacle.draw(surface)
 
-            # 2) Draw only the "base" portion for each building unless it is being destroyed
+            # 2) Draw entire building (if being destroyed) or just base
             for building in [obs for obs in self.obstacles if isinstance(obs, Building)]:
                 if building.is_being_destroyed:
-                    # Draw entire building (will show explosion)
                     building.draw(surface)
                 else:
-                    # Just draw base portion
                     building.draw_base(surface)
 
-            # 3) Draw the snake IF it's not behind a building
-            snake_is_behind = False
-            for building in [obs for obs in self.obstacles if isinstance(obs, Building)]:
-                if building.is_snake_behind(self.game.snake):
-                    snake_is_behind = True
-                    break
-            if not snake_is_behind:
-                self.game.snake.draw(surface)
+            # 3) Always draw snake (instead of skipping if "behind")
+            #    This way, any building top drawn afterward will cover overlap.
+            self.game.snake.draw(surface)
 
-            # 4) Finally, draw the building "tops" if they're not being destroyed
+            # 4) Draw the building tops after the snake to create occlusion
             for building in [obs for obs in self.obstacles if isinstance(obs, Building)]:
                 if building.is_being_destroyed:
-                    # Already drawn the explosions, so skip top
+                    # Already drawn the destruction effect
                     continue
                 else:
                     building.draw_top(surface)
-
         else:
-            # Original logic for desert, forest, etc.
+            # Original logic for other biomes
             for obstacle in self.obstacles:
                 obstacle.draw(surface)
             self.game.snake.draw(surface)
 
-        # Draw food and cutscene after
+        # Draw food, cutscenes, etc. after
         if self.food:
             self.food.draw(surface)
         if self.current_cutscene:
