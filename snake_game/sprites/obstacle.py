@@ -1077,3 +1077,170 @@ class Lake(Obstacle):
                 hitbox.height = play_bottom - self.y
         
         return hitbox 
+
+class Rubble(Obstacle):
+    def __init__(self, x, y, variations, block_size=20):
+        super().__init__(x, y, variations, block_size)
+        self.can_be_destroyed = False
+        self.variant = variations.get('variant', 1)
+        
+        # Get dimensions based on city block size
+        self.width = variations['width'] * 16
+        self.height = variations['base_height']
+        
+        # Pre-generate static rubble pieces
+        self.rubble_pieces = self._generate_rubble_pieces()
+        
+        # Only embers should animate
+        self.embers = []
+        num_embers = (self.width * self.height) // 300
+        for _ in range(num_embers):
+            self.embers.append({
+                'x': x + random.randint(5, self.width - 5),
+                'y': y + random.randint(5, self.height - 5),
+                'flicker': random.randint(0, 20)
+            })
+
+    def _generate_rubble_pieces(self):
+        """Generate static rubble layout based on variant"""
+        pieces = []
+        
+        # Common rubble sizes for all variants
+        rubble_sizes = [
+            (6, 4),   # Small chunks
+            (8, 6),   # Medium chunks
+            (12, 8),  # Large chunks
+            (16, 6),  # Long pieces
+            (10, 10), # Square chunks
+        ]
+        
+        # Base color palette for all variants
+        colors = [(75, 75, 75), (85, 85, 85), (65, 65, 65), (70, 70, 70)]
+        
+        if self.variant == 1:  # Dense center pattern
+            # More debris in the center, spreading outward
+            center_x = self.width // 2
+            center_y = self.height // 2
+            
+            for _ in range(self.width * self.height // 200):
+                # Pick random size
+                w, h = random.choice(rubble_sizes)
+                
+                # Distance from center affects position randomness
+                dist_factor = random.uniform(0.2, 1.0)
+                x = center_x + (random.randint(-self.width//2, self.width//2) * dist_factor)
+                y = center_y + (random.randint(-self.height//2, self.height//2) * dist_factor)
+                
+                # Ensure within bounds
+                x = max(0, min(x, self.width - w))
+                y = max(0, min(y, self.height - h))
+                
+                pieces.append({
+                    'rect': (x, y, w, h),
+                    'color': random.choice(colors)
+                })
+                
+        elif self.variant == 2:  # Scattered piles
+            # Create 3-4 focal points for rubble piles
+            pile_centers = []
+            for _ in range(random.randint(3, 4)):
+                pile_centers.append((
+                    random.randint(20, self.width - 20),
+                    random.randint(20, self.height - 20)
+                ))
+            
+            # Generate debris around these points
+            for center_x, center_y in pile_centers:
+                for _ in range(self.width * self.height // 300):
+                    w, h = random.choice(rubble_sizes)
+                    # Closer to pile center = more likely placement
+                    spread = 30
+                    x = center_x + random.randint(-spread, spread)
+                    y = center_y + random.randint(-spread, spread)
+                    
+                    # Ensure within bounds
+                    x = max(0, min(x, self.width - w))
+                    y = max(0, min(y, self.height - h))
+                    
+                    pieces.append({
+                        'rect': (x, y, w, h),
+                        'color': random.choice(colors)
+                    })
+                    
+        else:  # Uniform spread with size variation
+            # Evenly distributed but with size clusters
+            for _ in range(self.width * self.height // 250):
+                w, h = random.choice(rubble_sizes)
+                x = random.randint(0, self.width - w)
+                y = random.randint(0, self.height - h)
+                
+                # Add main piece
+                pieces.append({
+                    'rect': (x, y, w, h),
+                    'color': random.choice(colors)
+                })
+                
+                # 50% chance to add 1-2 smaller adjacent pieces
+                if random.random() < 0.5:
+                    for _ in range(random.randint(1, 2)):
+                        small_w, small_h = random.choice(rubble_sizes[:2])  # Use smaller sizes
+                        offset_x = random.randint(-10, 10)
+                        offset_y = random.randint(-10, 10)
+                        
+                        adj_x = max(0, min(x + offset_x, self.width - small_w))
+                        adj_y = max(0, min(y + offset_y, self.height - small_h))
+                        
+                        pieces.append({
+                            'rect': (adj_x, adj_y, small_w, small_h),
+                            'color': random.choice(colors)
+                        })
+        
+        return pieces
+
+    def draw_normal(self, surface):
+        # Draw dark base
+        pygame.draw.rect(surface, (50, 50, 50),
+                        [self.x, self.y, self.width, self.height])
+        
+        # Draw static rubble pieces
+        for piece in self.rubble_pieces:
+            x, y, w, h = piece['rect']
+            pygame.draw.rect(surface, piece['color'],
+                           [self.x + x, self.y + y, w, h])
+        
+        # Draw animated embers on top
+        self._draw_embers(surface)
+
+    def _draw_embers(self, surface):
+        for ember in self.embers:
+            # Update flicker
+            ember['flicker'] = (ember['flicker'] + 1) % 30
+            
+            # Ember color varies between orange and bright yellow
+            flicker_intensity = abs(15 - ember['flicker']) / 15.0
+            red = 255
+            green = int(100 + (155 * flicker_intensity))
+            blue = 20
+            
+            # Size pulses with flicker
+            size = 2 if ember['flicker'] < 15 else 3
+            
+            # Small random movement
+            offset_x = random.randint(-1, 1)
+            offset_y = random.randint(-1, 1)
+            
+            # Draw ember
+            pygame.draw.rect(surface, (red, green, blue),
+                           [ember['x'] + offset_x,
+                            ember['y'] + offset_y,
+                            size, size])
+            
+            # Occasional spark effect (rising)
+            if random.random() < 0.1:
+                spark_x = ember['x'] + random.randint(-5, 5)
+                spark_y = ember['y'] + random.randint(-5, 0)  # Bias upward
+                pygame.draw.rect(surface, (255, 255, 200),
+                               [spark_x, spark_y, 1, 1])
+
+    def get_hitbox(self):
+        return None 

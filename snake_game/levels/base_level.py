@@ -2,7 +2,7 @@ import pygame
 import random
 import math
 from sprites.food import Food
-from sprites.obstacle import Cactus, Tree, Bush, Pond, Building, Park, Lake
+from sprites.obstacle import Cactus, Tree, Bush, Pond, Building, Park, Lake, Rubble
 from sprites.snake import Snake
 from .sky_manager import SkyManager
 from .level_data import TIMES_OF_DAY
@@ -466,10 +466,27 @@ class BaseLevel:
         self.sky_manager.update()
         
         # Update all obstacles
-        for obs in self.obstacles:
+        for obs in self.obstacles[:]:  # iterate over a copy, so we can remove
             if obs.update_destruction():
                 # Only remove if it was destroyed (not discharged)
                 if obs.is_being_destroyed and obs.can_be_destroyed:
+                    # If it's a building in the city, spawn rubble
+                    if isinstance(obs, Building) and self.level_data['biome'] == 'city':
+                        # Create rubble with same dimensions as building
+                        new_rubble = Rubble(
+                            obs.x,
+                            obs.y,
+                            {
+                                'variant': random.choice([1, 2, 3]),
+                                'width': obs.variations['width'],
+                                'height': obs.variations['height'],
+                                'base_height': obs.base_height
+                            },
+                            obs.block_size
+                        )
+                        self.obstacles.append(new_rubble)
+                    
+                    # Remove the destroyed obstacle from the list
                     self.obstacles.remove(obs)
     
     def find_safe_spawn_for_snake(self, snake):
