@@ -299,7 +299,7 @@ class Game:
 
         # NEW: Faint "Press ESC to skip" if a cutscene exists
         if self.current_level.current_cutscene:
-            skip_text = "ESC = Skip"
+            skip_text = "Esc = Skip"
             skip_surface = font.render(skip_text, True, (160, 160, 160))
             skip_rect = skip_surface.get_rect(topleft=(10, level_rect.bottom + 10))
             self.window.blit(skip_surface, skip_rect)
