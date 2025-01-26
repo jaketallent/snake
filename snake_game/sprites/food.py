@@ -28,6 +28,14 @@ class Food:
             self._draw_fox(surface, block)
         elif self.critter_data['type'] == 'deer':
             self._draw_deer(surface, block)
+        elif self.critter_data['type'] == 'car':
+            self._draw_car(surface, block)
+        elif self.critter_data['type'] == 'truck':
+            self._draw_truck(surface, block)
+        elif self.critter_data['type'] == 'bus':
+            self._draw_bus(surface, block)
+        elif self.critter_data['type'] == 'van':
+            self._draw_van(surface, block)
     
     def _draw_mouse(self, surface, block):
         # Body
@@ -137,4 +145,46 @@ class Food:
         pygame.draw.rect(surface, self.critter_data['spot_color'],
                         [self.x + block, self.y + block, block, block])
         pygame.draw.rect(surface, self.critter_data['spot_color'],
-                        [self.x + block * 2, self.y + block * 2, block, block]) 
+                        [self.x + block * 2, self.y + block * 2, block, block])
+
+    def _draw_car(self, surface, block):
+        # Body
+        pygame.draw.rect(surface, self.critter_data['color'],
+                        [self.x + block, self.y + block, block * 2, block * 2])
+        # Windows
+        pygame.draw.rect(surface, self.critter_data['secondary_color'],
+                        [self.x + block, self.y, block * 2, block])
+        # Wheels
+        pygame.draw.rect(surface, (0, 0, 0),
+                        [self.x, self.y + block * 2, block, block])
+        pygame.draw.rect(surface, (0, 0, 0),
+                        [self.x + block * 3, self.y + block * 2, block, block])
+
+    def _draw_truck(self, surface, block):
+        # Cab
+        pygame.draw.rect(surface, self.critter_data['color'],
+                        [self.x, self.y + block, block * 2, block * 2])
+        # Cargo area
+        pygame.draw.rect(surface, self.critter_data['color'],
+                        [self.x + block * 2, self.y, block * 2, block * 3])
+        # Windows
+        pygame.draw.rect(surface, self.critter_data['secondary_color'],
+                        [self.x, self.y, block * 2, block])
+
+    def _draw_bus(self, surface, block):
+        # Long body
+        pygame.draw.rect(surface, self.critter_data['color'],
+                        [self.x, self.y, block * 4, block * 3])
+        # Windows
+        for i in range(3):
+            pygame.draw.rect(surface, self.critter_data['secondary_color'],
+                            [self.x + block * (i + 1), self.y + block,
+                             block, block])
+
+    def _draw_van(self, surface, block):
+        # Body
+        pygame.draw.rect(surface, self.critter_data['color'],
+                        [self.x, self.y, block * 3, block * 3])
+        # Windows
+        pygame.draw.rect(surface, self.critter_data['secondary_color'],
+                        [self.x, self.y + block, block * 2, block]) 

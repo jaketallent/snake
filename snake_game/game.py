@@ -7,6 +7,11 @@ from sprites.snake import Snake
 from menu import MainMenu, LevelSelectMenu
 from audio.music_manager import MusicManager
 
+################################################################################
+# Developer/Debug toggle
+DEV_MODE = True  # Set to False to disable dev features
+################################################################################
+
 class Game:
     def __init__(self):
         pygame.init()
@@ -49,15 +54,29 @@ class Game:
         ]
     
     def load_level(self, level_idx, keep_time=False):
-        """
-        Load a level
-        keep_time: If True, maintain the current time of day (for retries)
-        """
+        """Load a level"""
+        if self.current_level:
+            self.current_level.cleanup(stop_music=not keep_time)
+        
+        # Only stop music if we're changing levels (not on retry)
+        if not keep_time:  # keep_time=True means it's a retry
+            self.music_manager.stop_music()
+        
+        # Reset snake state completely
+        self.snake.reset(self.width // 2, self.height // 2)
+        self.snake.is_sleeping = False
+        self.snake.emote = None
+        self.snake.look_at(None)
+        
         level_data = LEVELS[level_idx]
         self.current_level = BaseLevel(self, level_data, self.current_time_of_day if keep_time else None)
         self.current_level_idx = level_idx
+        
         if not keep_time:
-            self.current_time_of_day = self.current_level.current_time  # Store the new time
+            self.current_time_of_day = self.current_level.current_time
+            # Only start music if we're not retrying and there's no intro cutscene
+            if not self.current_level.show_intro:
+                self.current_level.start_gameplay()
     
     def next_level(self):
         if self.current_level_idx + 1 < len(LEVELS):
@@ -67,7 +86,7 @@ class Game:
     
     def run(self):
         running = True
-        self.music_manager.play_menu_music()  # Start with menu music
+        self.music_manager.play_menu_music()
         
         while running:
             if self.in_menu:
@@ -77,9 +96,6 @@ class Game:
                 elif action == "start_game":
                     self.in_menu = False
                     self.load_level(0)
-                    if self.run_game() == "quit":
-                        running = False
-                    self.music_manager.play_menu_music()  # Return to menu music
                 elif action == "level_select":
                     self.current_menu = self.level_select_menu
                 elif action == "main_menu":
@@ -87,13 +103,17 @@ class Game:
                 elif isinstance(action, tuple) and action[0] == "start_level":
                     self.in_menu = False
                     self.load_level(action[1])
-                    if self.run_game() == "quit":
-                        running = False
             else:
-                if self.run_game() == "quit":
+                result = self.run_game()
+                if result == "quit":
                     running = False
-                self.in_menu = True
-                self.current_menu = self.main_menu
+                elif result == "menu":
+                    self.in_menu = True
+                    self.current_menu = self.main_menu
+                    self.music_manager.play_menu_music()
+                elif result == "restart_game":  # Handle the new return value
+                    # Just let the loop continue - it will start a fresh run_game()
+                    pass
     
     def run_menu(self):
         while True:
@@ -112,39 +132,60 @@ class Game:
     def run_game(self):
         game_over = False
         game_close = False
+        
+        # Start intro cutscene if the level has one and we're not returning from menu
+        if self.current_level.show_intro and not self.current_level.current_cutscene:
+            self.current_level.start_intro_cutscene()
+        else:
+            # No cutscene, start gameplay
+            if not self.current_level.current_cutscene:
+                self.current_level.start_gameplay()
 
         while not game_over:
-            # Check for ESC key state directly
-            keys = pygame.key.get_pressed()
-            if keys[pygame.K_ESCAPE]:
-                if game_close:
-                    return None  # Return to menu if game over
-                else:
-                    return None  # Return to menu during gameplay
-
-            # Handle other events
+            # Process all events
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     return "quit"
                 
                 if event.type == pygame.KEYDOWN:
-                    if game_close:
-                        if event.key == pygame.K_RETURN:
-                            self.load_level(self.current_level_idx, keep_time=True)  # Keep time on retry
+                    if event.key == pygame.K_ESCAPE:
+                        if self.current_level.current_cutscene:
+                            # NEW: Skip the current cutscene
+                            self.current_level.current_cutscene = None
+                            self.current_level.start_gameplay()
+                        else:
+                            # existing logic for returning to menu
+                            self.current_level.current_cutscene = None
                             game_close = False
-                        continue
-                
-                # Handle all snake input if not game over
-                if not game_close:
-                    self.snake.handle_input(event)
+                            game_over = False
+                            return "menu"
+                    
+                    # Developer feature: SHIFT+P toggles power-up
+                    if DEV_MODE and (event.mod & pygame.KMOD_SHIFT) and event.key == pygame.K_p:
+                        self.snake.is_powered_up = not self.snake.is_powered_up
+                        self.snake.power_up_timer = 0  # Reset its timer
+                    
+                    # Handle other input based on game state
+                    if self.current_level.current_cutscene:
+                        if event.key == pygame.K_RETURN:
+                            self.current_level.current_cutscene.handle_input()
+                    elif game_close:  # Only handle ENTER during game over
+                        if event.key == pygame.K_RETURN:
+                            self.load_level(self.current_level_idx, keep_time=True)
+                            game_close = False
+                    else:  # Normal gameplay input
+                        self.snake.handle_input(event)
 
             # Update and draw game state
+            if self.current_level.current_cutscene:
+                self.current_level.current_cutscene.update()
             self.current_level.update()
             self.snake.update_power_up()
             
             # Draw game state
             self.current_level.draw(self.window)
-            self.snake.draw(self.window)
+            if self.current_level.current_cutscene:
+                self.current_level.current_cutscene.draw(self.window)
             self.draw_ui()
             
             # Check collisions and game state
@@ -154,25 +195,53 @@ class Game:
                     # Wait for death animation to complete
                     for _ in range(self.snake.death_frames):
                         self.current_level.draw(self.window)
-                        self.snake.draw(self.window)
                         pygame.display.update()
                         self.clock.tick(60)
                 
                 if self.current_level.check_food_collision(self.snake):
                     self.snake.grow()
-                    if self.current_level.is_complete():
-                        if not self.next_level():
-                            self.show_message("You Won!", (0, 255, 0))
+                
+                if self.current_level.is_complete():
+                    # Handle level completion
+                    next_level_idx = self.current_level_idx + 1
+                    if next_level_idx >= len(self.levels):
+                        self.show_message("You Won!", (0, 255, 0))
+                        pygame.display.update()
+                        pygame.time.wait(2000)
+                        return None
+                    else:
+                        # Show victory message and wait for input
+                        waiting_for_input = True
+                        while waiting_for_input:
+                            self.show_message(
+                                "Level Complete!\n"
+                                "[ENTER] Continue",
+                                (0, 255, 0)
+                            )
                             pygame.display.update()
-                            pygame.time.wait(2000)
-                            return None
+                            
+                            for event in pygame.event.get():
+                                if event.type == pygame.QUIT:
+                                    return "quit"
+                                if event.type == pygame.KEYDOWN:
+                                    if event.key == pygame.K_RETURN:
+                                        waiting_for_input = False
+                                    elif event.key == pygame.K_ESCAPE:
+                                        return "menu"
+                            
+                            self.clock.tick(60)
+                        
+                        # After player presses ENTER, load next level
+                        self.music_manager.stop_music()
+                        self.load_level(next_level_idx)
+                        return "restart_game"  # Add this return value to force a fresh game state
             
             # Show game over message if needed
             if game_close:
                 self.show_message(
                     "GAME OVER!\n"
                     "[ESC] Main Menu\n"
-                    "[ENTER] Retry Level",
+                    "[ENTER] Resurrect",
                     (255, 0, 0)
                 )
             
@@ -215,21 +284,32 @@ class Game:
         # Use the initialized font
         font = self.font
         
-        # Draw level name (using display_name instead of full name)
+        # Draw level name
         level_text = f"Level: {self.current_level.display_name}"
         level_surface = font.render(level_text, True, (255, 255, 255))
         level_rect = level_surface.get_rect(topleft=(10, 10))
         
-        # Add a semi-transparent background for better readability
+        # Semi-transparent background for the level text
         padding = 5
         bg_rect = level_rect.inflate(padding * 2, padding * 2)
         bg_surface = pygame.Surface(bg_rect.size, pygame.SRCALPHA)
         pygame.draw.rect(bg_surface, (0, 0, 0, 128), bg_surface.get_rect())
         self.window.blit(bg_surface, bg_rect)
         self.window.blit(level_surface, level_rect)
-        
-        # Draw score/progress
-        score_text = f"Food: {self.current_level.food_count}/{self.current_level.required_food}"
+
+        # NEW: Faint "Press ESC to skip" if a cutscene exists
+        if self.current_level.current_cutscene:
+            skip_text = "Esc = Skip"
+            skip_surface = font.render(skip_text, True, (160, 160, 160))
+            skip_rect = skip_surface.get_rect(topleft=(10, level_rect.bottom + 10))
+            self.window.blit(skip_surface, skip_rect)
+
+        # Show Buildings or Food
+        if self.current_level.level_data['biome'] == 'city':
+            score_text = f"Buildings: {self.current_level.buildings_destroyed}/{self.current_level.required_buildings}"
+        else:
+            score_text = f"Food: {self.current_level.food_count}/{self.current_level.required_food}"
+
         score_surface = font.render(score_text, True, (255, 255, 255))
         score_rect = score_surface.get_rect(topright=(self.width - 10, 10))
         
