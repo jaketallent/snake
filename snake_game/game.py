@@ -7,6 +7,11 @@ from sprites.snake import Snake
 from menu import MainMenu, LevelSelectMenu
 from audio.music_manager import MusicManager
 
+################################################################################
+# Developer/Debug toggle
+DEV_MODE = True  # Set to False to disable dev features
+################################################################################
+
 class Game:
     def __init__(self):
         pygame.init()
@@ -143,13 +148,22 @@ class Game:
                     return "quit"
                 
                 if event.type == pygame.KEYDOWN:
-                    # Always check for ESC key first
                     if event.key == pygame.K_ESCAPE:
-                        # Clear all game states
-                        self.current_level.current_cutscene = None
-                        game_close = False
-                        game_over = False
-                        return "menu"
+                        if self.current_level.current_cutscene:
+                            # NEW: Skip the current cutscene
+                            self.current_level.current_cutscene = None
+                            self.current_level.start_gameplay()
+                        else:
+                            # existing logic for returning to menu
+                            self.current_level.current_cutscene = None
+                            game_close = False
+                            game_over = False
+                            return "menu"
+                    
+                    # Developer feature: SHIFT+P toggles power-up
+                    if DEV_MODE and (event.mod & pygame.KMOD_SHIFT) and event.key == pygame.K_p:
+                        self.snake.is_powered_up = not self.snake.is_powered_up
+                        self.snake.power_up_timer = 0  # Reset its timer
                     
                     # Handle other input based on game state
                     if self.current_level.current_cutscene:
@@ -170,7 +184,6 @@ class Game:
             
             # Draw game state
             self.current_level.draw(self.window)
-            self.snake.draw(self.window)
             if self.current_level.current_cutscene:
                 self.current_level.current_cutscene.draw(self.window)
             self.draw_ui()
@@ -182,46 +195,46 @@ class Game:
                     # Wait for death animation to complete
                     for _ in range(self.snake.death_frames):
                         self.current_level.draw(self.window)
-                        self.snake.draw(self.window)
                         pygame.display.update()
                         self.clock.tick(60)
                 
                 if self.current_level.check_food_collision(self.snake):
                     self.snake.grow()
-                    if self.current_level.is_complete():
-                        # Handle level completion
-                        next_level_idx = self.current_level_idx + 1
-                        if next_level_idx >= len(self.levels):
-                            self.show_message("You Won!", (0, 255, 0))
+                
+                if self.current_level.is_complete():
+                    # Handle level completion
+                    next_level_idx = self.current_level_idx + 1
+                    if next_level_idx >= len(self.levels):
+                        self.show_message("You Won!", (0, 255, 0))
+                        pygame.display.update()
+                        pygame.time.wait(2000)
+                        return None
+                    else:
+                        # Show victory message and wait for input
+                        waiting_for_input = True
+                        while waiting_for_input:
+                            self.show_message(
+                                "Level Complete!\n"
+                                "[ENTER] Continue",
+                                (0, 255, 0)
+                            )
                             pygame.display.update()
-                            pygame.time.wait(2000)
-                            return None
-                        else:
-                            # Show victory message and wait for input
-                            waiting_for_input = True
-                            while waiting_for_input:
-                                self.show_message(
-                                    "Level Complete!\n"
-                                    "[ENTER] Continue",
-                                    (0, 255, 0)
-                                )
-                                pygame.display.update()
-                                
-                                for event in pygame.event.get():
-                                    if event.type == pygame.QUIT:
-                                        return "quit"
-                                    if event.type == pygame.KEYDOWN:
-                                        if event.key == pygame.K_RETURN:
-                                            waiting_for_input = False
-                                        elif event.key == pygame.K_ESCAPE:
-                                            return "menu"
-                                
-                                self.clock.tick(60)
                             
-                            # After player presses ENTER, load next level
-                            self.music_manager.stop_music()
-                            self.load_level(next_level_idx)
-                            return "restart_game"  # Add this return value to force a fresh game state
+                            for event in pygame.event.get():
+                                if event.type == pygame.QUIT:
+                                    return "quit"
+                                if event.type == pygame.KEYDOWN:
+                                    if event.key == pygame.K_RETURN:
+                                        waiting_for_input = False
+                                    elif event.key == pygame.K_ESCAPE:
+                                        return "menu"
+                            
+                            self.clock.tick(60)
+                        
+                        # After player presses ENTER, load next level
+                        self.music_manager.stop_music()
+                        self.load_level(next_level_idx)
+                        return "restart_game"  # Add this return value to force a fresh game state
             
             # Show game over message if needed
             if game_close:
@@ -271,21 +284,32 @@ class Game:
         # Use the initialized font
         font = self.font
         
-        # Draw level name (using display_name instead of full name)
+        # Draw level name
         level_text = f"Level: {self.current_level.display_name}"
         level_surface = font.render(level_text, True, (255, 255, 255))
         level_rect = level_surface.get_rect(topleft=(10, 10))
         
-        # Add a semi-transparent background for better readability
+        # Semi-transparent background for the level text
         padding = 5
         bg_rect = level_rect.inflate(padding * 2, padding * 2)
         bg_surface = pygame.Surface(bg_rect.size, pygame.SRCALPHA)
         pygame.draw.rect(bg_surface, (0, 0, 0, 128), bg_surface.get_rect())
         self.window.blit(bg_surface, bg_rect)
         self.window.blit(level_surface, level_rect)
-        
-        # Draw score/progress
-        score_text = f"Food: {self.current_level.food_count}/{self.current_level.required_food}"
+
+        # NEW: Faint "Press ESC to skip" if a cutscene exists
+        if self.current_level.current_cutscene:
+            skip_text = "Esc = Skip"
+            skip_surface = font.render(skip_text, True, (160, 160, 160))
+            skip_rect = skip_surface.get_rect(topleft=(10, level_rect.bottom + 10))
+            self.window.blit(skip_surface, skip_rect)
+
+        # Show Buildings or Food
+        if self.current_level.level_data['biome'] == 'city':
+            score_text = f"Buildings: {self.current_level.buildings_destroyed}/{self.current_level.required_buildings}"
+        else:
+            score_text = f"Food: {self.current_level.food_count}/{self.current_level.required_food}"
+
         score_surface = font.render(score_text, True, (255, 255, 255))
         score_rect = score_surface.get_rect(topright=(self.width - 10, 10))
         

@@ -189,7 +189,40 @@ class Obstacle:
         return pygame.Rect(self.x, self.y, self.block_size, self.block_size)
     
     def draw(self, surface):
+        # If we're in destruction or discharge, call the effect
+        if self.is_being_destroyed and self.can_be_destroyed:
+            pixels = self.get_destruction_pixels()
+            self.draw_destruction_effect(surface, pixels)
+        elif self.is_discharging and not self.can_be_destroyed:
+            # Some obstacles (like Lake/Pond) only discharge
+            self.draw_discharge_effect(surface)
+        else:
+            # Normal drawing for everything else
+            self.draw_normal(surface)
+
+    def draw_normal(self, surface):
+        """
+        Draw normal obstacle; override in child class
+        """
         pass
+
+    def get_destruction_pixels(self):
+        """
+        Return a list of (x, y, w, h) "pixels"
+        for the explosion. Override per obstacle.
+        """
+        return []
+
+    def get_no_spawn_rects(self):
+        """
+        By default, return the hitbox if it exists. 
+        Subclasses can override or extend this to add additional "blocked" areas.
+        """
+        rects = []
+        hb = self.get_hitbox()
+        if hb is not None:
+            rects.append(hb)
+        return rects
 
 class Tree(Obstacle):
     def get_custom_hitbox(self):
@@ -200,7 +233,7 @@ class Tree(Obstacle):
         x = self.x - (width - self.block_size) // 2
         return pygame.Rect(x, self.y, width, height)
     
-    def draw(self, surface):
+    def draw_normal(self, surface):
         if self.is_being_destroyed:
             # Collect all pixels that make up the tree
             pixels = []
@@ -277,8 +310,38 @@ class Tree(Obstacle):
                                [section_x, leaf_start_y + (i * section_height),
                                 section_width, section_height])
 
+    def get_destruction_pixels(self):
+        # Collect all pixels that make up the tree
+        pixels = []
+        height = int(self.variations['height'] * 24)  # Convert to int
+        width = int(self.variations['width'] * 16)    # Convert to int
+        trunk_width = max(16, width // 3)
+        
+        # Trunk pixels
+        for y in range(height):
+            pixels.append((self.x, self.y + y, trunk_width, 1))
+        
+        # Leaf pixels
+        leaf_sections = 4
+        leaf_height = int(height * 0.7)  # Convert to int
+        leaf_start_y = self.y
+        
+        for i in range(leaf_sections):
+            section_width = int(width - (i * width // (leaf_sections * 2)))  # Convert to int
+            section_width += self.variations.get(f'section_{i}_width', 0)
+            section_x = self.x + (trunk_width - section_width) // 2
+            section_height = leaf_height // leaf_sections
+            offset_x = self.variations.get(f'section_{i}_offset', 0)
+            section_x += offset_x
+            
+            for y in range(int(section_height)):  # Convert to int
+                pixels.append((section_x, leaf_start_y + (i * section_height) + y,
+                             section_width, 1))
+        
+        return pixels
+
 class Cactus(Obstacle):
-    def draw(self, surface):
+    def draw_normal(self, surface):
         if self.is_being_destroyed:
             # Collect pixels in larger chunks
             pixels = []
@@ -339,8 +402,18 @@ class Cactus(Obstacle):
                                    [self.x + pixel_size, second_arm_y,
                                     pixel_size * 2, pixel_size])
 
+    def get_destruction_pixels(self):
+        pixels = []
+        pixel_size = 4
+        height = self.variations['height'] * 8
+        width = pixel_size * 4
+        for y in range(0, height, pixel_size):
+            pixels.append((self.x, self.y + y, width, pixel_size))
+        # arms, etc.
+        return pixels
+
 class Bush(Obstacle):
-    def draw(self, surface):
+    def draw_normal(self, surface):
         if self.is_being_destroyed:
             # Collect all pixels that make up the bush
             pixels = []
@@ -397,17 +470,39 @@ class Bush(Obstacle):
                         pygame.draw.rect(surface, color,
                                        [px, py, pixel_size, pixel_size])
 
+    def get_destruction_pixels(self):
+        # Collect all pixels that make up the bush
+        pixels = []
+        size = self.variations['size'] * 8
+        pixel_size = 4
+        
+        # Base layer
+        base_width = size * 1.5
+        base_height = size
+        base_x = self.x + (size - base_width) // 2
+        base_y = self.y + size // 2
+        
+        for y in range(int(base_height)):
+            pixels.append((base_x, base_y + y, base_width, pixel_size))
+        
+        # Middle layer
+        for y in range(size):
+            pixels.append((self.x, self.y + size//4 + y, size, pixel_size))
+        
+        # Top layer
+        for y in range(size//2):
+            pixels.append((self.x + size//4, self.y + y, size//2, pixel_size))
+        
+        return pixels
+
 class Pond(Obstacle):
     def __init__(self, x, y, variations, block_size=20):
         super().__init__(x, y, variations, block_size)
         self.can_be_destroyed = False  # Ponds can't be destroyed
     
-    def draw(self, surface):
+    def draw_normal(self, surface):
         if self.is_discharging:
             self.draw_discharge_effect(surface)
-        elif self.is_being_destroyed:
-            # This shouldn't happen since can_be_destroyed is False
-            pass
         else:
             WATER_COLORS = [
                 (65, 105, 225),   # Royal blue
@@ -420,18 +515,14 @@ class Pond(Obstacle):
             height = self.variations['height'] * 12
             pixel_size = 4  # Size of each "pixel" block
             
-            # Calculate base rectangle
-            x = self.x
-            y = self.y
-            
             # Draw layers from bottom to top
             for i, color in enumerate(reversed(WATER_COLORS)):
                 # Each layer is slightly smaller
                 shrink = i * pixel_size * 2
                 layer_width = width - shrink
                 layer_height = height - shrink
-                layer_x = x + (shrink // 2)
-                layer_y = y + (shrink // 2)
+                layer_x = self.x + (shrink // 2)
+                layer_y = self.y + (shrink // 2)
                 
                 # Draw the layer as pixel blocks
                 for px in range(int(layer_x), int(layer_x + layer_width), pixel_size):
@@ -444,7 +535,767 @@ class Pond(Obstacle):
                         pygame.draw.rect(surface, color,
                                        [px, py, pixel_size, pixel_size])
     
-    def get_custom_hitbox(self):
+    def get_hitbox(self):
         width = self.variations['width'] * 16
         height = self.variations['height'] * 12
-        return pygame.Rect(self.x, self.y, width, height) 
+        return pygame.Rect(self.x, self.y, width, height)
+
+class Building(Obstacle):
+    def __init__(self, x, y, variations, block_size=20):
+        super().__init__(x, y, variations, block_size)
+        self.window_states = {}
+        self.window_timer = 0
+        self.window_change_delay = 60
+
+        width = variations['width'] * 16
+        self.base_height = variations['base_height']
+        self.full_height = variations['height'] * 24
+
+        # Generate and store rooftop objects
+        self.rooftop_objects = self._generate_rooftop_objects(width)
+        
+        # Make City Buildings destroyable, same as cacti/trees:
+        self.can_be_destroyed = True
+    
+    def _generate_rooftop_objects(self, width):
+        objects = []
+        num_objects = random.randint(1, 3)
+        possible_positions = list(range(width // 4, width - 20, 20))
+        
+        if possible_positions:
+            chosen_positions = random.sample(possible_positions, min(num_objects, len(possible_positions)))
+            for pos_x in chosen_positions:
+                objects.append({
+                    'type': random.choice(['antenna', 'ac_unit', 'water_tank']),
+                    'x': pos_x,
+                    'specs': {
+                        'height': random.randint(20, 30) if random.choice(['antenna']) else None,
+                        'width': random.randint(12, 16) if random.choice(['ac_unit']) else 
+                                random.randint(14, 18) if random.choice(['water_tank']) else None,
+                        'unit_height': random.randint(8, 12) if random.choice(['ac_unit']) else 
+                                     random.randint(16, 20) if random.choice(['water_tank']) else None,
+                        'bar_widths': [random.randint(4, 8) for _ in range(4)] if random.choice(['antenna']) else None
+                    }
+                })
+        return objects
+    
+    def get_base_sort_y(self):
+        """
+        Return the vertical "foot" of the base section.
+        """
+        return self.y + self.variations['base_height']
+
+    def get_top_sort_y(self):
+        """
+        Return the vertical position for drawing the top. 
+        Use the full building height so it's always drawn last
+        if the building is taller than the snake.
+        """
+        total_height = self.variations['height'] * 24
+        return self.y + total_height
+
+    def draw_normal(self, surface):
+        self.draw_base(surface)
+        self.draw_top(surface)
+
+    def draw_base(self, surface):
+        # Use colors from variations if available, otherwise use defaults
+        colors = self.variations.get('colors', {
+            'base': (128, 128, 128),
+            'top': (100, 100, 100),
+            'windows': (200, 200, 100),
+            'entrance': (60, 60, 60),
+            'trim': (90, 90, 90)
+        })
+        width = self.variations['width'] * 16
+        base_height = self.variations['base_height']
+        self._draw_building_section(surface, colors, self.x, self.y, width, base_height)
+
+    def draw_top(self, surface):
+        """Draw the building's top portion."""
+        # Use same colors from variations
+        colors = self.variations.get('colors', {
+            'base': (128, 128, 128),
+            'top': (100, 100, 100),
+            'windows': (200, 200, 100),
+            'entrance': (60, 60, 60),
+            'trim': (90, 90, 90)
+        })
+        width = self.variations['width'] * 16
+        total_height = self.variations['height'] * 24
+        base_height = self.variations['base_height']
+        
+        # Draw the actual building top
+        self._draw_building_section(
+            surface,
+            colors,
+            self.x,
+            self.y - (total_height - base_height),
+            width,
+            total_height - base_height
+        )
+
+    def draw(self, surface):
+        # If we're in destruction or discharge, call the effect
+        if self.is_being_destroyed and self.can_be_destroyed:
+            pixels = self.get_destruction_pixels()
+            self.draw_destruction_effect(surface, pixels)
+        elif self.is_discharging and not self.can_be_destroyed:
+            # Some obstacles (like Lake/Pond) only discharge
+            self.draw_discharge_effect(surface)
+        else:
+            # Normal drawing for everything else
+            self.draw_normal(surface)
+
+    def _draw_building_section(self, surface, colors, x, y, width, height):
+        # Update window states every window_change_delay frames
+        self.window_timer = (self.window_timer + 1) % self.window_change_delay
+        if self.window_timer == 0:
+            for key in self.window_states:
+                if random.random() < 0.1:
+                    self.window_states[key] = random.random() > 0.3
+        
+        # Draw main building body with different colors for base and top
+        is_base = y + height >= self.y + self.variations['base_height']
+        main_color = colors['base'] if is_base else colors['top']
+        shadow_color = tuple(max(0, c - 28) for c in main_color)
+        
+        # Main building with shadow
+        pygame.draw.rect(surface, shadow_color,
+                        [x + 4, y, width, height])
+        pygame.draw.rect(surface, main_color,
+                        [x, y, width - 4, height])
+        
+        # Add style-specific textures first
+        style = self.variations.get('style', 'concrete')
+        if style == 'brick':
+            self._add_brick_texture(surface, x, y, width, height, colors)
+        elif style == 'glass':
+            self._add_glass_texture(surface, x, y, width, height, colors)
+        
+        # Calculate entrance dimensions
+        entrance_width = min(32, width // 2)
+        entrance_height = min(24, height // 3)
+        entrance_x = x + (width - entrance_width) // 2
+        entrance_y = y + height - entrance_height
+        
+        # Then draw windows on top of the textures
+        window_size = 8
+        window_spacing = 16 if is_base else 20
+        window_offset = 4 if is_base else 8
+        
+        for row in range((height - window_offset) // window_spacing):
+            for col in range((width - 8) // window_spacing):
+                window_x = x + col * window_spacing + window_offset
+                window_y = y + row * window_spacing + window_offset
+                
+                # Skip windows that would overlap with the entrance area
+                if is_base and self.variations.get('has_entrance', False):
+                    window_rect = pygame.Rect(window_x, window_y, window_size, window_size)
+                    entrance_rect = pygame.Rect(entrance_x - 4, entrance_y - 2, 
+                                             entrance_width + 8, entrance_height + 2)
+                    if window_rect.colliderect(entrance_rect):
+                        continue
+                
+                window_key = (window_x, window_y)
+                if window_key not in self.window_states:
+                    self.window_states[window_key] = random.random() > 0.3
+                
+                if self.window_states[window_key]:
+                    pygame.draw.rect(surface, colors['windows'],
+                                   [window_x, window_y, window_size, window_size])
+        
+        # Draw entrance last so it's on top of everything
+        if is_base and self.variations.get('has_entrance', False):
+            # Draw entrance frame first
+            frame_color = colors['trim']
+            glass_color = (150, 180, 200, 200)  # Light blue-ish transparent glass
+            frame_width = 4
+            
+            # Main door frame
+            pygame.draw.rect(surface, frame_color,
+                           [entrance_x, entrance_y, entrance_width, entrance_height])
+            
+            # Glass panels (double doors)
+            door_width = (entrance_width - frame_width * 3) // 2  # Width for each door panel
+            
+            # Left door
+            pygame.draw.rect(surface, glass_color,
+                           [entrance_x + frame_width, 
+                            entrance_y + frame_width,
+                            door_width, 
+                            entrance_height - frame_width * 2])
+            
+            # Right door
+            pygame.draw.rect(surface, glass_color,
+                           [entrance_x + door_width + frame_width * 2,
+                            entrance_y + frame_width,
+                            door_width,
+                            entrance_height - frame_width * 2])
+            
+            # Door divider (center frame)
+            pygame.draw.rect(surface, frame_color,
+                           [entrance_x + door_width + frame_width,
+                            entrance_y,
+                            frame_width,
+                            entrance_height])
+            
+            # Add trim above entrance
+            pygame.draw.rect(surface, colors['trim'],
+                           [entrance_x - 4, entrance_y - 2, entrance_width + 8, 4])
+            
+            # Add subtle reflection highlights
+            highlight_color = (255, 255, 255, 100)
+            for door_x in [entrance_x + frame_width, entrance_x + door_width + frame_width * 2]:
+                pygame.draw.line(surface, highlight_color,
+                               (door_x + 2, entrance_y + frame_width + 2),
+                               (door_x + door_width - 2, entrance_y + frame_width + 2),
+                               2)
+        
+        # Add rooftop objects only to the top section (not base)
+        if not is_base:
+            self._add_rooftop_objects(surface, x, y, width, colors)
+    
+    def _add_rooftop_objects(self, surface, x, y, width, colors):
+        object_color = colors['trim']
+        darker_color = tuple(max(0, c - 20) for c in object_color)
+        
+        for obj in self.rooftop_objects:
+            pos_x = obj['x']
+            specs = obj['specs']
+            
+            if obj['type'] == 'antenna':
+                # Simpler antenna - just straight pole with 1-2 crossbars
+                base_x = x + pos_x
+                height = specs['height']
+                # Main pole
+                pygame.draw.line(surface, object_color,
+                               (base_x, y), (base_x, y - height), 2)
+                # Just one or two simple crossbars
+                for h, bar_width in zip([height//2, height-8], specs['bar_widths'][:2]):
+                    pygame.draw.line(surface, object_color,
+                                   (base_x - bar_width, y - h),
+                                   (base_x + bar_width, y - h), 2)
+            
+            elif obj['type'] == 'ac_unit':
+                # Simpler AC unit - just a basic box
+                unit_width = specs['width']
+                unit_height = specs['unit_height']
+                pygame.draw.rect(surface, darker_color,
+                               [x + pos_x, y - unit_height, unit_width, unit_height])
+                # Just one central vent line
+                pygame.draw.line(surface, object_color,
+                               (x + pos_x + unit_width//2, y - unit_height + 2),
+                               (x + pos_x + unit_width//2, y - 2), 2)
+            
+            elif obj['type'] == 'water_tank':
+                # Simpler water tank - rectangular with flat top
+                tank_width = specs['width']
+                tank_height = specs['unit_height']
+                # Draw tank body
+                pygame.draw.rect(surface, darker_color,
+                               [x + pos_x, y - tank_height, tank_width, tank_height])
+                # Simple top line instead of ellipse
+                pygame.draw.line(surface, object_color,
+                               (x + pos_x, y - tank_height),
+                               (x + pos_x + tank_width, y - tank_height), 2)
+    
+    def _add_brick_texture(self, surface, x, y, width, height, colors):
+        brick_height = 8
+        brick_width = 16
+        brick_color = tuple(max(0, c - 15) for c in colors['base'])
+        mortar_color = tuple(max(0, c - 25) for c in colors['base'])  # Darker for mortar lines
+        
+        # Draw bricks only within building bounds
+        for row in range(height // brick_height):
+            offset = (row % 2) * (brick_width // 2)  # Alternate brick pattern
+            for col in range(width // brick_width + 1):  # +1 to fill edge
+                brick_x = x + col * brick_width + offset
+                brick_y = y + row * brick_height
+                
+                # Only draw if brick is within building bounds
+                if brick_x < x + width - 4:  # Account for shadow
+                    # Draw mortar lines
+                    pygame.draw.rect(surface, mortar_color,
+                                   [brick_x, brick_y, brick_width, brick_height])
+                    # Draw slightly smaller brick inside
+                    pygame.draw.rect(surface, brick_color,
+                                   [brick_x + 1, brick_y + 1, 
+                                    brick_width - 2, brick_height - 2])
+
+    def _add_glass_texture(self, surface, x, y, width, height, colors):
+        # Use the same window spacing for texture alignment
+        window_spacing = 16 if y + height >= self.y + self.variations['base_height'] else 20
+        window_offset = 4 if y + height >= self.y + self.variations['base_height'] else 8
+        
+        # Vertical lines between windows
+        line_color = tuple(min(255, c + 15) for c in colors['base'])
+        
+        # Draw vertical lines between windows
+        for col in range(window_offset, width - 4, window_spacing):
+            pygame.draw.line(surface, line_color,
+                           (x + col - 2, y),  # Slightly left of window
+                           (x + col - 2, y + height),
+                           1)
+        
+        # Horizontal lines between window rows
+        for row in range(window_offset, height, window_spacing):
+            if row + 2 <= height:
+                pygame.draw.line(surface, line_color,
+                               (x, y + row - 2),  # Slightly above window
+                               (x + width - 4, y + row - 2),
+                               1)
+    
+    def get_destruction_pixels(self):
+        """
+        2) Return pixels covering the entire building (top + base).
+           That way, destroying the base triggers a full building explosion.
+        """
+        width = self.variations['width'] * 16
+        total_height = self.variations['height'] * 24
+        
+        # top_y is the building's uppermost point
+        top_y = self.y - (total_height - self.base_height)
+        return [(self.x, top_y, width, total_height)]
+
+    def is_snake_behind(self, snake):
+        """Check if the snake is behind this building's top section"""
+        snake_rect = pygame.Rect(snake.x, snake.y, snake.block_size, snake.block_size)
+        
+        total_height = self.variations['height'] * 24
+        base_height = self.variations['base_height']
+        width = self.variations['width'] * 16
+
+        # Adjusted to start at self.y - total_height, covering the building's 
+        # entire upper section. The 'top' portion is total_height - base_height high.
+        building_rect = pygame.Rect(
+            self.x,
+            self.y - total_height,
+            width,
+            total_height - base_height
+        )
+
+        return snake_rect.colliderect(building_rect)
+
+    def get_hitbox(self):
+        """
+        1) Return only the base rectangle so the top is never collidable.
+        """
+        width = self.variations['width'] * 16
+        base_height = self.base_height  # The bottom portion
+        return pygame.Rect(self.x, self.y, width, base_height)
+
+    def get_top_bounding_rect(self):
+        """Returns the pygame.Rect covering the building's top section."""
+        width = self.variations['width'] * 16
+        total_height = self.variations['height'] * 24
+        base_height = self.variations['base_height']
+        
+        # Use the exact same coordinates as draw_top() uses
+        return pygame.Rect(
+            self.x,                                     # same x as base
+            self.y - (total_height - base_height),      # same calculation as draw_top
+            width,                                      # same width as base
+            total_height - base_height                  # same height calculation as draw_top
+        )
+
+    def get_no_spawn_rects(self):
+        """
+        Return both the base hitbox and the top bounding rect so that 
+        food cannot spawn behind or on the building top.
+        """
+        rects = []
+        base_rect = self.get_hitbox()
+        if base_rect is not None:
+            rects.append(base_rect)
+
+        top_rect = self.get_top_bounding_rect()
+        rects.append(top_rect)
+
+        return rects
+
+class Park(Obstacle):
+    def __init__(self, x, y, variations, block_size=20):
+        super().__init__(x, y, variations, block_size)
+        self.style = random.choice(['playground', 'grove'])
+        
+        width = variations['width'] * 16
+        height = variations['height'] * 12
+        
+        # Generate static grass pattern once
+        self.grass_pattern = []
+        for x in range(0, width, 4):
+            for y in range(0, height, 4):
+                if random.random() > 0.8:
+                    self.grass_pattern.append((x, y))
+        
+        # Generate static elements
+        self.elements = []
+        if self.style == 'playground':
+            # Add a swing set
+            self.elements.append({
+                'type': 'swings',
+                'x': width // 3,
+                'y': height // 2,
+                'width': 24
+            })
+            
+            # Add either a slide or monkey bars
+            self.elements.append({
+                'type': random.choice(['slide', 'monkey_bars']),
+                'x': width * 2 // 3,
+                'y': height // 2,
+                'width': 16
+            })
+            
+            # Add a few trees around the edges
+            tree_spots = [(width//5, height*3//4), (width*4//5, height*3//4)]
+            for pos in tree_spots:
+                self.elements.append({
+                    'type': 'tree',
+                    'x': pos[0],
+                    'y': pos[1],
+                    'size': 16
+                })
+                
+        else:  # grove style
+            # Add trees in a natural-looking cluster
+            tree_positions = [
+                (width//3, height//3),
+                (width*2//3, height//3),
+                (width//2, height//2),
+                (width//4, height*2//3),
+                (width*3//4, height*2//3)
+            ]
+            
+            for pos in tree_positions:
+                self.elements.append({
+                    'type': 'tree',
+                    'x': pos[0],
+                    'y': pos[1],
+                    'size': random.randint(14, 18)  # Slightly bigger trees
+                })
+
+    def draw_normal(self, surface):
+        width = self.variations['width'] * 16
+        height = self.variations['height'] * 12
+        
+        # Draw base grass
+        grass_colors = [(34, 139, 34), (0, 100, 0)]  # Light and dark green
+        pygame.draw.rect(surface, grass_colors[0],
+                        [self.x, self.y, width, height])
+        
+        # Draw stored grass pattern
+        for x, y in self.grass_pattern:
+            pygame.draw.rect(surface, grass_colors[1],
+                           [self.x + x, self.y + y, 4, 4])
+        
+        # Draw all elements
+        for elem in self.elements:
+            if elem['type'] == 'swings':
+                self._draw_swings(surface, self.x + elem['x'], self.y + elem['y'], elem['width'])
+            elif elem['type'] == 'slide':
+                self._draw_slide(surface, self.x + elem['x'], self.y + elem['y'])
+            elif elem['type'] == 'monkey_bars':
+                self._draw_monkey_bars(surface, self.x + elem['x'], self.y + elem['y'])
+            elif elem['type'] == 'tree':
+                self._draw_tree(surface, self.x + elem['x'], self.y + elem['y'], elem['size'])
+
+    def _draw_tree(self, surface, x, y, size):
+        # Simple tree with brown trunk and green leaves
+        trunk_color = (139, 69, 19)  # Brown
+        leaf_color = (34, 139, 34)   # Forest green
+        
+        # Trunk
+        pygame.draw.rect(surface, trunk_color, [x - 2, y - size//4, 4, size//2])
+        
+        # Leaves (simple triangle shape)
+        leaf_points = [
+            (x, y - size//2),  # Top
+            (x - size//2, y + size//4),  # Bottom left
+            (x + size//2, y + size//4)   # Bottom right
+        ]
+        pygame.draw.polygon(surface, leaf_color, leaf_points)
+
+    def _draw_swings(self, surface, x, y, width):
+        # Metal swing set
+        metal_color = (180, 180, 200)  # Light metallic
+        seat_color = (60, 60, 70)      # Dark metal for seats
+        
+        # Top bar
+        pygame.draw.rect(surface, metal_color, [x, y, width, 3])
+        
+        # Swings
+        for swing_x in [x + 8, x + width - 8]:
+            # Chain
+            pygame.draw.line(surface, metal_color, (swing_x, y), (swing_x, y + 12), 2)
+            # Seat
+            pygame.draw.rect(surface, seat_color, [swing_x - 3, y + 12, 6, 2])
+
+    def _draw_slide(self, surface, x, y):
+        # Metal slide
+        metal_color = (180, 180, 200)  # Light metallic
+        
+        # Platform
+        pygame.draw.rect(surface, metal_color, [x, y - 8, 8, 2])
+        # Slide surface
+        pygame.draw.line(surface, metal_color, (x + 8, y - 8), (x + 16, y), 3)
+        # Support pole
+        pygame.draw.line(surface, metal_color, (x + 2, y), (x + 2, y - 8), 2)
+
+    def _draw_monkey_bars(self, surface, x, y):
+        # Metal monkey bars
+        metal_color = (180, 180, 200)  # Light metallic
+        
+        # Posts
+        pygame.draw.line(surface, metal_color, (x, y), (x, y - 12), 2)
+        pygame.draw.line(surface, metal_color, (x + 16, y), (x + 16, y - 12), 2)
+        # Top bar
+        pygame.draw.rect(surface, metal_color, [x, y - 12, 16, 2])
+
+    def get_hitbox(self):
+        # Parks have no collision - snake can pass through them
+        return None
+
+class Lake(Obstacle):
+    def __init__(self, x, y, variations, block_size=20):
+        super().__init__(x, y, variations, block_size)
+        # --------------------------------------------------
+        # Make lakes discharge instead of being destroyed
+        self.can_be_destroyed = False
+        # --------------------------------------------------
+
+    def draw_normal(self, surface):
+        if self.is_discharging:
+            self.draw_discharge_effect(surface)
+        else:
+            width = self.variations['width'] * 16
+            height = self.variations['height'] * 12
+            
+            # Draw base grass border
+            grass_colors = [(34, 139, 34), (0, 100, 0)]
+            pygame.draw.rect(surface, grass_colors[0],
+                            [self.x, self.y, width, height])
+            
+            # Animated water with multiple layers
+            water_colors = [
+                (65, 105, 225),   # Royal blue
+                (30, 144, 255),   # Dodger blue
+                (135, 206, 235),  # Sky blue
+            ]
+            margin = 8
+            
+            # Draw water layers with animated edges
+            for i, color in enumerate(reversed(water_colors)):
+                shrink = i * 4
+                water_rect = [
+                    self.x + margin + shrink,
+                    self.y + margin + shrink,
+                    width - (margin + shrink) * 2,
+                    height - (margin + shrink) * 2
+                ]
+                
+                # Draw water with pixelated edges
+                for px in range(int(water_rect[0]), int(water_rect[0] + water_rect[2]), 4):
+                    for py in range(int(water_rect[1]), int(water_rect[1] + water_rect[3]), 4):
+                        if (px == water_rect[0] or 
+                            px >= water_rect[0] + water_rect[2] - 4 or
+                            py == water_rect[1] or 
+                            py >= water_rect[1] + water_rect[3] - 4):
+                            if random.random() > 0.7:  # Animated edges
+                                continue
+                        pygame.draw.rect(surface, color, [px, py, 4, 4]) 
+        # --------------------------------------------------
+
+    def get_hitbox(self):
+        width = self.variations['width'] * 16
+        height = self.variations['height'] * 12
+        
+        # Create hitbox
+        hitbox = pygame.Rect(self.x, self.y, width, height)
+        
+        # Get the play area bottom from the game instance
+        if hasattr(self, 'game') and self.game and hasattr(self.game, 'current_level'):
+            play_bottom = self.game.current_level.play_area['bottom']
+            # If this is a bottom row lake, extend hitbox to play area bottom
+            if abs(self.y + height - play_bottom) < 50:  # If we're close to the bottom
+                hitbox.height = play_bottom - self.y
+        
+        return hitbox 
+
+    def get_no_spawn_rects(self):
+        """
+        Return a bounding rect covering the entire lake surface.
+        """
+        rects = []
+        water_hitbox = self.get_hitbox()  # or a custom water rect if needed
+        if water_hitbox is not None:
+            rects.append(water_hitbox)
+        return rects
+
+class Rubble(Obstacle):
+    def __init__(self, x, y, variations, block_size=20):
+        super().__init__(x, y, variations, block_size)
+        self.can_be_destroyed = False
+        self.variant = variations.get('variant', 1)
+        
+        # Get dimensions based on city block size
+        self.width = variations['width'] * 16
+        self.height = variations['base_height']
+        
+        # Pre-generate static rubble pieces
+        self.rubble_pieces = self._generate_rubble_pieces()
+        
+        # Only embers should animate
+        self.embers = []
+        num_embers = (self.width * self.height) // 300
+        for _ in range(num_embers):
+            self.embers.append({
+                'x': x + random.randint(5, self.width - 5),
+                'y': y + random.randint(5, self.height - 5),
+                'flicker': random.randint(0, 20)
+            })
+
+    def _generate_rubble_pieces(self):
+        """Generate static rubble layout based on variant"""
+        pieces = []
+        
+        # Common rubble sizes for all variants
+        rubble_sizes = [
+            (6, 4),   # Small chunks
+            (8, 6),   # Medium chunks
+            (12, 8),  # Large chunks
+            (16, 6),  # Long pieces
+            (10, 10), # Square chunks
+        ]
+        
+        # Base color palette for all variants
+        colors = [(75, 75, 75), (85, 85, 85), (65, 65, 65), (70, 70, 70)]
+        
+        if self.variant == 1:  # Dense center pattern
+            # More debris in the center, spreading outward
+            center_x = self.width // 2
+            center_y = self.height // 2
+            
+            for _ in range(self.width * self.height // 200):
+                # Pick random size
+                w, h = random.choice(rubble_sizes)
+                
+                # Distance from center affects position randomness
+                dist_factor = random.uniform(0.2, 1.0)
+                x = center_x + (random.randint(-self.width//2, self.width//2) * dist_factor)
+                y = center_y + (random.randint(-self.height//2, self.height//2) * dist_factor)
+                
+                # Ensure within bounds
+                x = max(0, min(x, self.width - w))
+                y = max(0, min(y, self.height - h))
+                
+                pieces.append({
+                    'rect': (x, y, w, h),
+                    'color': random.choice(colors)
+                })
+                
+        elif self.variant == 2:  # Scattered piles
+            # Create 3-4 focal points for rubble piles
+            pile_centers = []
+            for _ in range(random.randint(3, 4)):
+                pile_centers.append((
+                    random.randint(20, self.width - 20),
+                    random.randint(20, self.height - 20)
+                ))
+            
+            # Generate debris around these points
+            for center_x, center_y in pile_centers:
+                for _ in range(self.width * self.height // 300):
+                    w, h = random.choice(rubble_sizes)
+                    # Closer to pile center = more likely placement
+                    spread = 30
+                    x = center_x + random.randint(-spread, spread)
+                    y = center_y + random.randint(-spread, spread)
+                    
+                    # Ensure within bounds
+                    x = max(0, min(x, self.width - w))
+                    y = max(0, min(y, self.height - h))
+                    
+                    pieces.append({
+                        'rect': (x, y, w, h),
+                        'color': random.choice(colors)
+                    })
+                    
+        else:  # Uniform spread with size variation
+            # Evenly distributed but with size clusters
+            for _ in range(self.width * self.height // 250):
+                w, h = random.choice(rubble_sizes)
+                x = random.randint(0, self.width - w)
+                y = random.randint(0, self.height - h)
+                
+                # Add main piece
+                pieces.append({
+                    'rect': (x, y, w, h),
+                    'color': random.choice(colors)
+                })
+                
+                # 50% chance to add 1-2 smaller adjacent pieces
+                if random.random() < 0.5:
+                    for _ in range(random.randint(1, 2)):
+                        small_w, small_h = random.choice(rubble_sizes[:2])  # Use smaller sizes
+                        offset_x = random.randint(-10, 10)
+                        offset_y = random.randint(-10, 10)
+                        
+                        adj_x = max(0, min(x + offset_x, self.width - small_w))
+                        adj_y = max(0, min(y + offset_y, self.height - small_h))
+                        
+                        pieces.append({
+                            'rect': (adj_x, adj_y, small_w, small_h),
+                            'color': random.choice(colors)
+                        })
+        
+        return pieces
+
+    def draw_normal(self, surface):
+        # Draw dark base
+        pygame.draw.rect(surface, (50, 50, 50),
+                        [self.x, self.y, self.width, self.height])
+        
+        # Draw static rubble pieces
+        for piece in self.rubble_pieces:
+            x, y, w, h = piece['rect']
+            pygame.draw.rect(surface, piece['color'],
+                           [self.x + x, self.y + y, w, h])
+        
+        # Draw animated embers on top
+        self._draw_embers(surface)
+
+    def _draw_embers(self, surface):
+        for ember in self.embers:
+            # Update flicker
+            ember['flicker'] = (ember['flicker'] + 1) % 30
+            
+            # Ember color varies between orange and bright yellow
+            flicker_intensity = abs(15 - ember['flicker']) / 15.0
+            red = 255
+            green = int(100 + (155 * flicker_intensity))
+            blue = 20
+            
+            # Size pulses with flicker
+            size = 2 if ember['flicker'] < 15 else 3
+            
+            # Small random movement
+            offset_x = random.randint(-1, 1)
+            offset_y = random.randint(-1, 1)
+            
+            # Draw ember
+            pygame.draw.rect(surface, (red, green, blue),
+                           [ember['x'] + offset_x,
+                            ember['y'] + offset_y,
+                            size, size])
+            
+            # Occasional spark effect (rising)
+            if random.random() < 0.1:
+                spark_x = ember['x'] + random.randint(-5, 5)
+                spark_y = ember['y'] + random.randint(-5, 0)  # Bias upward
+                pygame.draw.rect(surface, (255, 255, 200),
+                               [spark_x, spark_y, 1, 1])
+
+    def get_hitbox(self):
+        return None 
