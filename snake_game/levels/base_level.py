@@ -7,6 +7,7 @@ from sprites.snake import Snake
 from .sky_manager import SkyManager
 from .level_data import TIMES_OF_DAY
 from cutscenes.base_cutscene import BaseCutscene
+from sprites.boss import TankBoss
 
 class BaseLevel:
     def __init__(self, game, level_data, time_of_day=None):
@@ -22,6 +23,10 @@ class BaseLevel:
         # Track building destruction separately for city
         self.buildings_destroyed = 0
         self.required_buildings = 0
+        
+        # Add boss-related attributes
+        self.boss = None
+        self.boss_health = 100 if level_data.get('is_boss', False) else 0
         
         # Create sky manager first so we can use it to determine play area
         biome = level_data['biome']
@@ -66,6 +71,14 @@ class BaseLevel:
         self.current_cutscene = None
         self.cutscenes = level_data.get('cutscenes', {})
         self.show_intro = 'intro' in self.cutscenes
+        
+        # Initialize boss if this is a boss level
+        if self.level_data.get('is_boss', False):
+            self.boss = TankBoss(
+                self.game.width // 2 - 60,  # Center horizontally
+                self.play_area['top'] + 50,  # Near top of play area
+                self.game
+            )
     
     def initialize_obstacles(self):
         if 'obstacle_type' in self.level_data:
@@ -126,14 +139,31 @@ class BaseLevel:
                 # Shuffle and split positions once
                 random.shuffle(grid_positions)
                 total = len(grid_positions)
-                building_count = total * 2 // 3  # 2/3 for buildings
+                building_count = total * 2 // 3  # 2/3 for buildings/rubble
                 park_count = (total - building_count) // 2  # Half of remaining for parks
                 
-                self.building_positions = grid_positions[:building_count]
+                # Keep same ratios but store building positions as rubble positions in boss level
+                if self.level_data.get('is_boss', False):
+                    self.building_positions = grid_positions[:building_count]  # These will be used for rubble
+                else:
+                    self.building_positions = grid_positions[:building_count]
+                
                 self.park_positions = grid_positions[building_count:building_count + park_count]
                 self.lake_positions = grid_positions[building_count + park_count:]
             
-            if obstacle_type == 'building':
+            if obstacle_type == 'rubble' and self.level_data.get('is_boss', False):
+                # Use building positions for rubble in boss level
+                for x, y, width, height in self.building_positions:
+                    variations = {
+                        'variant': random.choice([1, 2, 3]),
+                        'width': width // 16,
+                        'height': height // 12,
+                        'base_height': height
+                    }
+                    new_obstacle = Rubble(x, y, variations, self.block_size)
+                    self.obstacles.append(new_obstacle)
+            
+            elif obstacle_type == 'building' and not self.level_data.get('is_boss', False):
                 # Get building styles from level data
                 building_styles = self.level_data['background_colors'].get('building_styles', {
                     'concrete': {
@@ -228,6 +258,14 @@ class BaseLevel:
                         'height': random.randint(min_size-1, max_size-1)
                     }
                     new_obstacle = Pond(x, y, variations)
+                elif obstacle_type == 'rubble':
+                    variations = {
+                        'variant': random.choice([1, 2, 3]),
+                        'width': random.randint(min_size, max_size),
+                        'height': random.randint(min_size-1, max_size-1),
+                        'base_height': block_size - road_width
+                    }
+                    new_obstacle = Rubble(x, y, variations, self.block_size)
                 else:
                     continue
                 
@@ -380,6 +418,38 @@ class BaseLevel:
     def check_collision(self, snake):
         new_x, new_y = snake.update()
         
+        # Check projectile collisions BEFORE clamping position
+        if self.boss:
+            for proj in self.boss.projectiles[:]:
+                proj_rect = pygame.Rect(proj['x'], proj['y'], 10, 10)
+                
+                # Check collision with head at new position
+                head_rect = pygame.Rect(new_x, new_y, 
+                                      snake.block_size, snake.block_size)
+                
+                # Check collision with rest of body at current positions
+                hit = False
+                if proj_rect.colliderect(head_rect):
+                    hit = True
+                else:
+                    for segment in snake.body[:-1]:  # Exclude head which we already checked
+                        segment_rect = pygame.Rect(segment[0], segment[1],
+                                                 snake.block_size, snake.block_size)
+                        if proj_rect.colliderect(segment_rect):
+                            hit = True
+                            break
+                
+                if hit:
+                    self.boss.projectiles.remove(proj)
+                    if not snake.is_powered_up:
+                        if len(snake.body) > 1:
+                            # Just lose a segment if we have extra length
+                            snake.lose_segment()
+                        else:
+                            # Die if we're just a head
+                            snake.die()
+                            return True
+
         # NEW: Snap first, then clamp
         if self.level_data['biome'] == 'city':
             new_x = round(new_x / snake.block_size) * snake.block_size
@@ -455,7 +525,9 @@ class BaseLevel:
         return False
     
     def is_complete(self):
-        if self.level_data['biome'] == 'city':
+        if self.level_data.get('is_boss', False):
+            return self.boss_health <= 0  # Level complete when boss is defeated
+        elif self.level_data['biome'] == 'city':
             return self.buildings_destroyed >= self.required_buildings
         else:
             return self.food_count >= self.required_food
@@ -499,6 +571,10 @@ class BaseLevel:
             self.food.draw(surface)
         if self.current_cutscene:
             self.current_cutscene.draw(surface)
+        
+        # Draw boss if present
+        if self.boss:
+            self.boss.draw(surface)
     
     def draw_background(self, surface):
         # Draw sky using sky manager
@@ -573,6 +649,29 @@ class BaseLevel:
         
         self.sky_manager.update()
         
+        # Update boss if present
+        if self.boss:
+            self.boss.update()
+            
+            # Check if powered-up snake hits boss
+            if self.game.snake.is_powered_up:
+                snake_rect = pygame.Rect(
+                    self.game.snake.x, 
+                    self.game.snake.y,
+                    self.game.snake.block_size,
+                    self.game.snake.block_size
+                )
+                boss_rect = pygame.Rect(
+                    self.boss.x,
+                    self.boss.y,
+                    self.boss.width,
+                    self.boss.height
+                )
+                if snake_rect.colliderect(boss_rect):
+                    damage = self.boss.take_damage()
+                    self.boss_health = max(0, self.boss_health - damage)
+                    self.game.snake.destroy_obstacle()  # Consume power-up
+
         # Update all obstacles
         for obs in self.obstacles[:]:  # iterate over a copy, so we can remove
             if obs.update_destruction():
@@ -600,6 +699,31 @@ class BaseLevel:
                     
                     # Remove the destroyed obstacle from the list
                     self.obstacles.remove(obs)
+        
+        # Update snake projectiles
+        if self.game.snake.projectiles:
+            for proj in self.game.snake.projectiles[:]:
+                # Update position
+                proj['x'] += proj['dx']
+                proj['y'] += proj['dy']
+                proj['lifetime'] -= 1
+                
+                if proj['lifetime'] <= 0:
+                    self.game.snake.projectiles.remove(proj)
+                    continue
+                
+                # Check collision with boss
+                if self.boss:
+                    proj_rect = pygame.Rect(proj['x'] - 4, proj['y'] - 4, 8, 8)
+                    boss_rect = pygame.Rect(
+                        self.boss.x, self.boss.y,
+                        self.boss.width, self.boss.height
+                    )
+                    
+                    if proj_rect.colliderect(boss_rect):
+                        self.game.snake.projectiles.remove(proj)
+                        damage = self.boss.take_damage()
+                        self.boss_health = max(0, self.boss_health - damage // 5)  # 1/5th of normal damage
     
     def find_safe_spawn_for_snake(self, snake):
         max_attempts = 100

@@ -304,8 +304,10 @@ class Game:
             skip_rect = skip_surface.get_rect(topleft=(10, level_rect.bottom + 10))
             self.window.blit(skip_surface, skip_rect)
 
-        # Show Buildings or Food
-        if self.current_level.level_data['biome'] == 'city':
+        # Show Buildings, Food, or Boss Health
+        if self.current_level.level_data.get('is_boss', False):
+            score_text = f"Boss Health: {self.current_level.boss_health}%"  # We'll implement boss health later
+        elif self.current_level.level_data['biome'] == 'city':
             score_text = f"Buildings: {self.current_level.buildings_destroyed}/{self.current_level.required_buildings}"
         else:
             score_text = f"Food: {self.current_level.food_count}/{self.current_level.required_food}"

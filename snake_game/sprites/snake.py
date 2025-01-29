@@ -21,6 +21,14 @@ class Snake:
         self.look_at_point = None  # Point the snake is looking at
         self.emote = None  # Current emote to display
         self.emote_timer = 0
+        self.flash_timer = 0
+        self.is_flashing = False
+        self.flash_color = (255, 255, 255)
+        self.projectiles = []  # Store snake's venom projectiles
+        self.projectile_speed = self.block_size * 1.5  # 1.5x snake's movement speed
+        self.can_spit = True
+        self.spit_cooldown = 0
+        self.spit_cooldown_time = 15
         
     def reset(self, x, y):
         self.x = x
@@ -35,6 +43,10 @@ class Snake:
         self.death_frame = 0  # Reset death animation frame
         self.food_streak = 0
         self.is_powered_up = False
+        self.power_up_timer = 0
+        # Reset flash state
+        self.flash_timer = 0
+        self.is_flashing = False
         self.power_up_timer = 0
         
     def handle_input(self, event):
@@ -56,8 +68,20 @@ class Snake:
                 self.dy = self.block_size
                 self.dx = 0
                 self.wall_bounce_cooldown = 0
+            
+            # Add spit control (space bar)
+            elif event.key == pygame.K_SPACE:
+                self.spit_venom()
     
     def update(self):
+        # Update spit cooldown
+        if not self.can_spit:
+            self.spit_cooldown += 1
+            if self.spit_cooldown >= self.spit_cooldown_time:
+                self.can_spit = True
+                self.spit_cooldown = 0
+
+        # Original movement update logic
         if self.wall_bounce_cooldown > 0:
             self.wall_bounce_cooldown -= 1
             # During cooldown, only allow movement in the non-blocked direction
@@ -169,11 +193,20 @@ class Snake:
                 for i in range(4):
                     for j in range(4):
                         # Create shading pattern: darker on bottom/right edges
-                        color = (0, 200, 0) if (i == 3 or j == 3) else (0, 255, 0)
+                        if self.is_flashing:
+                            color = self.flash_color
+                        else:
+                            color = (0, 200, 0) if (i == 3 or j == 3) else (0, 255, 0)
                         pygame.draw.rect(surface, color,
                                        [segment[0] + (j * block),
                                         segment[1] + (i * block),
                                         block, block])
+            
+            # Update flash effect
+            if self.is_flashing:
+                self.flash_timer -= 1
+                if self.flash_timer <= 0:
+                    self.is_flashing = False
             
             # Draw eyes
             if self.body:
@@ -194,7 +227,52 @@ class Snake:
                         size = 5 + (i * 2)
                         pygame.draw.rect(surface, zzz_color,
                                        [x, y, size, size])
-    
+            
+            # Draw projectiles with enhanced electric effect
+            for proj in self.projectiles[:]:
+                time = pygame.time.get_ticks()
+                
+                # Draw lightning trail
+                trail_length = 6
+                for i in range(trail_length):
+                    trail_x = int(proj['x'] - proj['dx'] * i * 0.5)
+                    trail_y = int(proj['y'] - proj['dy'] * i * 0.5)
+                    
+                    # Fade out trail
+                    alpha = 255 - (i * 40)
+                    trail_color = (0, 255, 255, alpha)
+                    
+                    # Create surface for semi-transparent trail
+                    trail_surface = pygame.Surface((8, 8), pygame.SRCALPHA)
+                    pygame.draw.circle(trail_surface, trail_color, (4, 4), 3 - i * 0.4)
+                    surface.blit(trail_surface, (trail_x - 4, trail_y - 4))
+                
+                # Draw crackling electric effects
+                num_crackles = 6
+                for i in range(num_crackles):
+                    angle = (time / 100 + i * (2 * math.pi / num_crackles))
+                    for dist in [6, 8]:  # Two rings of crackles
+                        offset_x = math.cos(angle) * dist
+                        offset_y = math.sin(angle) * dist
+                        
+                        # Add random variation to crackle position
+                        jitter = math.sin(time / 50 + i) * 2
+                        offset_x += random.uniform(-jitter, jitter)
+                        offset_y += random.uniform(-jitter, jitter)
+                        
+                        # Draw electric particle
+                        particle_color = (0, 255, 255) if dist == 6 else (100, 255, 255)
+                        pygame.draw.circle(surface, particle_color,
+                                        (int(proj['x'] + offset_x),
+                                         int(proj['y'] + offset_y)), 2)
+                
+                # Draw core of projectile with pulsing effect
+                core_size = 4 + math.sin(time / 100) * 1
+                pygame.draw.circle(surface, (255, 255, 255),
+                                 (int(proj['x']), int(proj['y'])), int(core_size))
+                pygame.draw.circle(surface, (0, 255, 0),
+                                 (int(proj['x']), int(proj['y'])), int(core_size - 1))
+
     def _draw_eyes(self, surface):
         if not self.body:  # Safety check
             return
@@ -371,3 +449,38 @@ class Snake:
         """Show an emote above the snake's head"""
         self.emote = emote_type
         self.emote_timer = 0 
+
+    def lose_segment(self):
+        if len(self.body) > 1:
+            # Remove last segment
+            self.body.pop()
+            # Reduce length to match
+            self.length -= 1
+            # Flash white briefly to show damage
+            self.flash_timer = 10
+            self.is_flashing = True 
+
+    def spit_venom(self):
+        """Spit a venom projectile at the cost of one segment"""
+        if len(self.body) > 1 and self.can_spit:
+            # Calculate direction based on current movement
+            if self.dx == 0 and self.dy == 0:
+                return  # Don't spit if not moving
+            
+            # Remove a segment
+            self.body.pop()
+            self.length -= 1
+            
+            # Create projectile with normalized direction and faster speed
+            angle = math.atan2(self.dy, self.dx)
+            self.projectiles.append({
+                'x': self.x + self.block_size/2,
+                'y': self.y + self.block_size/2,
+                'dx': math.cos(angle) * self.projectile_speed,
+                'dy': math.sin(angle) * self.projectile_speed,
+                'lifetime': 60  # 1 second lifetime
+            })
+            
+            # Start cooldown
+            self.can_spit = False
+            self.spit_cooldown = 0 
