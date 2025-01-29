@@ -260,8 +260,11 @@ class BaseLevel:
             # 1) Check standard collisions & BFS reachability
             if not self.is_safe_position(x, y):
                 continue
-            if not self.is_reachable_by_snake(x, y):
-                continue
+
+            # Fix: Only do BFS reachability check if not Desert
+            if self.level_data['biome'] != 'desert':
+                if not self.is_reachable_by_snake(x, y):
+                    continue
 
             # 2) If we're in the city, also skip if this position sits on a building top
             if self.level_data['biome'] == 'city' and self._overlaps_building_top(x, y):
@@ -279,12 +282,16 @@ class BaseLevel:
     def _overlaps_building_top(self, x, y):
         """
         Checks if the 1-tile food at (x,y) overlaps any building's top rectangle.
+        Also adds a buffer zone around building tops in the city.
         """
         food_rect = pygame.Rect(x, y, self.block_size, self.block_size)
         for obs in self.obstacles:
             if isinstance(obs, Building):
                 top_rect = obs.get_top_bounding_rect()
-                if food_rect.colliderect(top_rect):
+                # Add the same buffer zone as we do for collision rects
+                inflated_rect = top_rect.inflate(20, 20)
+                inflated_rect.center = top_rect.center
+                if food_rect.colliderect(inflated_rect):
                     return True
         return False
 
@@ -298,7 +305,15 @@ class BaseLevel:
         # 1) Check each obstacle's no-spawn rects
         for obstacle in self.obstacles:
             for blocked_rect in obstacle.get_no_spawn_rects():
-                if food_rect.colliderect(blocked_rect):
+                # Only enlarge the obstacle area in the city.
+                if self.level_data['biome'] == 'city':
+                    # Increase the inflation to 20px
+                    inflated_rect = blocked_rect.inflate(20, 20)
+                    inflated_rect.center = blocked_rect.center
+                else:
+                    inflated_rect = blocked_rect
+
+                if food_rect.colliderect(inflated_rect):
                     return False
 
         # 2) Optionally check collision with snake's body if you don't want to spawn on snake
