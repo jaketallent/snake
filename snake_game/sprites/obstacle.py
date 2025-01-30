@@ -340,6 +340,61 @@ class Tree(Obstacle):
         
         return pixels
 
+    def get_hitbox(self):
+        """Returns a list of smaller hitboxes that better match the tree's shape"""
+        hitboxes = []
+        
+        # Calculate dimensions based on variations
+        width = self.variations['width'] * 16
+        height = self.variations['height'] * 24
+        
+        # Trunk hitbox - make it shorter than visual height
+        trunk_width = self.block_size * 0.8  # Slightly thinner trunk
+        trunk_height = height * 0.8  # Only 80% of visual height
+        trunk = pygame.Rect(
+            self.x + (width - trunk_width) // 2,
+            self.y + height * 0.1,  # Start 10% down from top
+            trunk_width,
+            trunk_height
+        )
+        hitboxes.append(trunk)
+        
+        # Add hitboxes for each foliage section
+        for i in range(4):  # 4 sections of leaves
+            section_y = self.y + (i * self.block_size)
+            section_width = ((self.variations['width'] + 
+                            self.variations[f'section_{i}_width'] // 8) * 
+                           self.block_size)
+            
+            # Make sections shorter for more forgiving collisions
+            section_height = self.block_size * 0.7  # 70% of normal height
+            
+            # Center the section hitbox on the trunk
+            section_x = self.x + (width - section_width) // 2
+            # Apply the section's offset
+            section_x += self.variations[f'section_{i}_offset']
+            
+            # Make sections slightly narrower
+            section_width *= 0.9  # 90% of visual width
+            
+            section = pygame.Rect(
+                section_x + section_width * 0.05,  # Center the narrower hitbox
+                section_y + (self.block_size - section_height) // 2,  # Center vertically
+                section_width,
+                section_height
+            )
+            hitboxes.append(section)
+        
+        return hitboxes
+    
+    def check_collision(self, rect):
+        """Check if any of our hitboxes collide with the given rect"""
+        hitboxes = self.get_hitbox()
+        for hitbox in hitboxes:
+            if rect.colliderect(hitbox):
+                return True
+        return False
+
 class Cactus(Obstacle):
     def draw_normal(self, surface):
         if self.is_being_destroyed:

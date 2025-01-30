@@ -23,7 +23,7 @@ class Game:
         pygame.display.set_caption("Snake Game")
         
         self.clock = pygame.time.Clock()
-        self.snake_speed = 15
+        self.snake_speed = 14
         self.current_level_idx = 0
         self.current_level = None
         self.snake = Snake(self.width // 2, self.height // 2)
@@ -207,6 +207,17 @@ class Game:
                     self.snake.grow()
                 
                 if self.current_level.is_complete():
+                    # Set food/building counts to maximum BEFORE drawing final frame
+                    if self.current_level.level_data['biome'] == 'city':
+                        self.current_level.buildings_destroyed = self.current_level.required_buildings
+                    else:
+                        self.current_level.food_count = self.current_level.required_food
+                    
+                    # Draw one more frame with the updated count
+                    self.current_level.draw(self.window)
+                    self.draw_ui()
+                    pygame.display.update()
+                    
                     # Handle level completion
                     next_level_idx = self.current_level_idx + 1
                     if next_level_idx >= len(self.levels):
@@ -296,12 +307,24 @@ class Game:
         if self.current_level.level_data.get('is_boss', False):
             pass  # Boss health will be drawn above boss
         elif self.current_level.level_data['biome'] == 'city':
-            score_text = f"Buildings: {self.current_level.buildings_destroyed}/{self.current_level.required_buildings}"
+            # Show full amount if we've hit or exceeded the requirement
+            if self.current_level.buildings_destroyed >= self.current_level.required_buildings:
+                buildings_count = self.current_level.required_buildings
+            else:
+                buildings_count = self.current_level.buildings_destroyed
+            
+            score_text = f"Buildings: {buildings_count}/{self.current_level.required_buildings}"
             score_surface = font.render(score_text, True, (255, 255, 255))
             score_rect = score_surface.get_rect(topleft=(10, score_y))
             self.window.blit(score_surface, score_rect)
         else:
-            score_text = f"Food: {self.current_level.food_count}/{self.current_level.required_food}"
+            # Show full amount if we've hit or exceeded the requirement
+            if self.current_level.food_count >= self.current_level.required_food:
+                food_count = self.current_level.required_food
+            else:
+                food_count = self.current_level.food_count
+            
+            score_text = f"Food: {food_count}/{self.current_level.required_food}"
             score_surface = font.render(score_text, True, (255, 255, 255))
             score_rect = score_surface.get_rect(topleft=(10, score_y))
             self.window.blit(score_surface, score_rect)

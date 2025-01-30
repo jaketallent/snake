@@ -271,13 +271,43 @@ class BaseLevel:
                 
                 # Check for collisions with existing obstacles
                 collision = False
-                new_hitbox = new_obstacle.get_hitbox()
-                for existing_obstacle in self.obstacles:
-                    padding = self.block_size
-                    padded_hitbox = new_hitbox.inflate(padding, padding)
-                    if padded_hitbox.colliderect(existing_obstacle.get_hitbox()):
-                        collision = True
-                        break
+                new_hitboxes = new_obstacle.get_hitbox()
+                if isinstance(new_hitboxes, list):
+                    # Handle list of hitboxes
+                    for hitbox in new_hitboxes:
+                        padded_hitbox = hitbox.inflate(self.block_size, self.block_size)
+                        for existing_obstacle in self.obstacles:
+                            existing_hitbox = existing_obstacle.get_hitbox()
+                            if existing_hitbox is None:
+                                continue
+                            if isinstance(existing_hitbox, list):
+                                # Check against all hitboxes of existing obstacle
+                                for existing_box in existing_hitbox:
+                                    if padded_hitbox.colliderect(existing_box):
+                                        collision = True
+                                        break
+                            else:
+                                if padded_hitbox.colliderect(existing_hitbox):
+                                    collision = True
+                                    break
+                        if collision:
+                            break
+                else:
+                    # Handle single hitbox (old behavior)
+                    padded_hitbox = new_hitboxes.inflate(self.block_size, self.block_size)
+                    for existing_obstacle in self.obstacles:
+                        existing_hitbox = existing_obstacle.get_hitbox()
+                        if existing_hitbox is None:
+                            continue
+                        if isinstance(existing_hitbox, list):
+                            for existing_box in existing_hitbox:
+                                if padded_hitbox.colliderect(existing_box):
+                                    collision = True
+                                    break
+                        else:
+                            if padded_hitbox.colliderect(existing_hitbox):
+                                collision = True
+                                break
                 
                 if not collision:
                     self.obstacles.append(new_obstacle)
@@ -343,22 +373,36 @@ class BaseLevel:
         # 1) Check each obstacle's no-spawn rects
         for obstacle in self.obstacles:
             for blocked_rect in obstacle.get_no_spawn_rects():
-                # Only enlarge the obstacle area in the city.
-                if self.level_data['biome'] == 'city':
-                    # Increase the inflation to 20px
-                    inflated_rect = blocked_rect.inflate(20, 20)
-                    inflated_rect.center = blocked_rect.center
-                else:
-                    inflated_rect = blocked_rect
+                # Handle both single rect and list of rects
+                if isinstance(blocked_rect, list):
+                    # If it's a list of rects, check each one
+                    for rect in blocked_rect:
+                        # Only enlarge the obstacle area in the city.
+                        if self.level_data['biome'] == 'city':
+                            # Increase the inflation to 20px
+                            inflated_rect = rect.inflate(20, 20)
+                            inflated_rect.center = rect.center
+                        else:
+                            inflated_rect = rect
 
-                if food_rect.colliderect(inflated_rect):
-                    return False
+                        if food_rect.colliderect(inflated_rect):
+                            return False
+                else:
+                    # Handle single rect
+                    if self.level_data['biome'] == 'city':
+                        inflated_rect = blocked_rect.inflate(20, 20)
+                        inflated_rect.center = blocked_rect.center
+                    else:
+                        inflated_rect = blocked_rect
+
+                    if food_rect.colliderect(inflated_rect):
+                        return False
 
         # 2) Optionally check collision with snake's body if you don't want to spawn on snake
         if self.game.snake:
             for segment in self.game.snake.body:
                 segment_rect = pygame.Rect(segment[0], segment[1], 
-                                           self.block_size, self.block_size)
+                                         self.block_size, self.block_size)
                 if food_rect.colliderect(segment_rect):
                     return False
         
@@ -404,9 +448,21 @@ class BaseLevel:
                         snake_rect = pygame.Rect(nx, ny, snake.block_size, snake.block_size)
                         collision = False
                         for obs in self.obstacles:
-                            hbox = obs.get_hitbox()
-                            if hbox and snake_rect.colliderect(hbox):
-                                collision = True
+                            hitbox = obs.get_hitbox()
+                            if hitbox is None:
+                                continue
+                            
+                            if isinstance(hitbox, list):
+                                # Check against all hitboxes of the obstacle
+                                for box in hitbox:
+                                    if snake_rect.colliderect(box):
+                                        collision = True
+                                        break
+                            else:
+                                if snake_rect.colliderect(hitbox):
+                                    collision = True
+                            
+                            if collision:
                                 break
                         
                         if not collision:
@@ -452,8 +508,25 @@ class BaseLevel:
 
         # NEW: Snap first, then clamp
         if self.level_data['biome'] == 'city':
-            new_x = round(new_x / snake.block_size) * snake.block_size
-            new_y = round(new_y / snake.block_size) * snake.block_size
+            # Calculate how far into the next tile we are
+            tile_progress_x = (new_x % snake.block_size) / snake.block_size
+            tile_progress_y = (new_y % snake.block_size) / snake.block_size
+            
+            # If we're less than 25% into the next tile, treat us as still in the previous tile
+            # for movement purposes
+            if tile_progress_x < 0.25:
+                new_x = math.floor(new_x / snake.block_size) * snake.block_size
+            elif tile_progress_x > 0.75:
+                new_x = math.ceil(new_x / snake.block_size) * snake.block_size
+            else:
+                new_x = round(new_x / snake.block_size) * snake.block_size
+                
+            if tile_progress_y < 0.25:
+                new_y = math.floor(new_y / snake.block_size) * snake.block_size
+            elif tile_progress_y > 0.75:
+                new_y = math.ceil(new_y / snake.block_size) * snake.block_size
+            else:
+                new_y = round(new_y / snake.block_size) * snake.block_size
 
         hit_wall = False
         # Clamp X within bounds
@@ -474,13 +547,21 @@ class BaseLevel:
 
         snake.move_to(new_x, new_y)
 
-        # Check obstacle collision - use the full snake rectangle
-        snake_rect = pygame.Rect(new_x, new_y, snake.block_size, snake.block_size)
+        # Check obstacle collision - use a slightly smaller hitbox for more forgiving collisions
+        hitbox_size = int(snake.block_size * 0.8)  # 80% of block size
+        offset = (snake.block_size - hitbox_size) // 2  # Center the hitbox
+        snake_rect = pygame.Rect(new_x + offset, new_y + offset, hitbox_size, hitbox_size)
         
         for obstacle in self.obstacles:
             hitbox = obstacle.get_hitbox()
             if hitbox is not None:
-                if snake_rect.colliderect(hitbox):
+                # Handle both single hitbox and multiple hitboxes
+                if isinstance(hitbox, list):
+                    collision = any(box.colliderect(snake_rect) for box in hitbox)
+                else:
+                    collision = snake_rect.colliderect(hitbox)
+                    
+                if collision:
                     # Skip if already being destroyed or discharged
                     if hasattr(obstacle, 'is_being_destroyed') and obstacle.is_being_destroyed:
                         continue
@@ -782,8 +863,20 @@ class BaseLevel:
                 collision = False
                 for obstacle in self.obstacles:
                     hitbox = obstacle.get_hitbox()
-                    if hitbox is not None and padded_rect.colliderect(hitbox):
-                        collision = True
+                    if hitbox is None:
+                        continue
+                        
+                    if isinstance(hitbox, list):
+                        # Check against all hitboxes of the obstacle
+                        for box in hitbox:
+                            if padded_rect.colliderect(box):
+                                collision = True
+                                break
+                    else:
+                        if padded_rect.colliderect(hitbox):
+                            collision = True
+                    
+                    if collision:
                         break
                 
                 if not collision:
@@ -816,8 +909,20 @@ class BaseLevel:
                 collision = False
                 for obstacle in self.obstacles:
                     hitbox = obstacle.get_hitbox()
-                    if hitbox is not None and padded_rect.colliderect(hitbox):
-                        collision = True
+                    if hitbox is None:
+                        continue
+                        
+                    if isinstance(hitbox, list):
+                        # Check against all hitboxes of the obstacle
+                        for box in hitbox:
+                            if padded_rect.colliderect(box):
+                                collision = True
+                                break
+                    else:
+                        if padded_rect.colliderect(hitbox):
+                            collision = True
+                    
+                    if collision:
                         break
                 
                 if not collision:
