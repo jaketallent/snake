@@ -425,7 +425,7 @@ class Game:
 
         # Draw skip text in top right if cutscene exists
         if self.current_level.current_cutscene:
-            skip_text = "Press Esc to Skip"
+            skip_text = "Esc to Skip"
             skip_surface = font.render(skip_text, True, (160, 160, 160))
             skip_rect = skip_surface.get_rect(topright=(self.width - 10, 10))
             self.window.blit(skip_surface, skip_rect) 
