@@ -183,10 +183,14 @@ class Obstacle:
             pygame.draw.rect(surface, color, [x, y, size, size])
     
     def get_hitbox(self):
-        # For trees, we need a larger hitbox based on their size
-        if hasattr(self, 'get_custom_hitbox'):
-            return self.get_custom_hitbox()
-        return pygame.Rect(self.x, self.y, self.block_size, self.block_size)
+        """Return a hitbox for the obstacle"""
+        # Default implementation for simple obstacles
+        return pygame.Rect(
+            int(self.x), 
+            int(self.y), 
+            int(self.block_size), 
+            int(self.block_size)
+        )
     
     def draw(self, surface):
         # If we're in destruction or discharge, call the effect
@@ -225,14 +229,6 @@ class Obstacle:
         return rects
 
 class Tree(Obstacle):
-    def get_custom_hitbox(self):
-        # Wider hitbox for larger trees
-        width = self.block_size * (self.variations['width'])
-        height = self.block_size * self.variations['height']
-        # Center the hitbox on the trunk
-        x = self.x - (width - self.block_size) // 2
-        return pygame.Rect(x, self.y, width, height)
-    
     def draw_normal(self, surface):
         if self.is_being_destroyed:
             # Collect all pixels that make up the tree
@@ -341,49 +337,52 @@ class Tree(Obstacle):
         return pixels
 
     def get_hitbox(self):
-        """Returns a list of smaller hitboxes that better match the tree's shape"""
+        """Return a list of hitboxes for the tree"""
+        # First try the original simpler hitbox approach
+        width = int(self.block_size * (self.variations['width']))
+        height = int(self.block_size * self.variations['height'])
+        # Center the hitbox on the trunk
+        x = int(self.x - (width - self.block_size) // 2)
+        
+        # Return a single rect for collision checks
+        return pygame.Rect(x, int(self.y), width, height)
+    
+    def get_no_spawn_rects(self):
+        """Return a more precise set of rects for food spawn checks"""
         hitboxes = []
         
-        # Calculate dimensions based on variations
-        width = self.variations['width'] * 16
-        height = self.variations['height'] * 24
+        # Convert all dimensions to integers
+        height = int(self.variations['height'] * 24)
+        width = int(self.variations['width'] * 16)
+        trunk_width = max(16, width // 3)
         
-        # Trunk hitbox - make it shorter than visual height
-        trunk_width = self.block_size * 0.8  # Slightly thinner trunk
-        trunk_height = height * 0.8  # Only 80% of visual height
-        trunk = pygame.Rect(
-            self.x + (width - trunk_width) // 2,
-            self.y + height * 0.1,  # Start 10% down from top
+        # Trunk hitbox
+        hitboxes.append(pygame.Rect(
+            int(self.x),
+            int(self.y),
             trunk_width,
-            trunk_height
-        )
-        hitboxes.append(trunk)
+            height
+        ))
         
-        # Add hitboxes for each foliage section
-        for i in range(4):  # 4 sections of leaves
-            section_y = self.y + (i * self.block_size)
-            section_width = ((self.variations['width'] + 
-                            self.variations[f'section_{i}_width'] // 8) * 
-                           self.block_size)
+        # Leaf hitboxes
+        leaf_sections = 4
+        leaf_height = int(height * 0.7)
+        leaf_start_y = int(self.y)
+        
+        for i in range(leaf_sections):
+            section_width = int(width - (i * width // (leaf_sections * 2)))
+            section_width += int(self.variations.get(f'section_{i}_width', 0))
+            section_x = int(self.x + (trunk_width - section_width) // 2)
+            section_height = leaf_height // leaf_sections
+            offset_x = int(self.variations.get(f'section_{i}_offset', 0))
+            section_x += offset_x
             
-            # Make sections shorter for more forgiving collisions
-            section_height = self.block_size * 0.7  # 70% of normal height
-            
-            # Center the section hitbox on the trunk
-            section_x = self.x + (width - section_width) // 2
-            # Apply the section's offset
-            section_x += self.variations[f'section_{i}_offset']
-            
-            # Make sections slightly narrower
-            section_width *= 0.9  # 90% of visual width
-            
-            section = pygame.Rect(
-                section_x + section_width * 0.05,  # Center the narrower hitbox
-                section_y + (self.block_size - section_height) // 2,  # Center vertically
+            hitboxes.append(pygame.Rect(
+                section_x,
+                leaf_start_y + (i * section_height),
                 section_width,
                 section_height
-            )
-            hitboxes.append(section)
+            ))
         
         return hitboxes
     
