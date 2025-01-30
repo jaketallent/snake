@@ -52,11 +52,16 @@ class Game:
              'twinkle_offset': random.random() * math.pi * 2}
             for _ in range(100)
         ]
+        
+        self.level_name_alpha = 255  # Add this for fade effect
     
     def load_level(self, level_idx, keep_time=False):
         """Load a level"""
         if self.current_level:
             self.current_level.cleanup(stop_music=not keep_time)
+        
+        # Reset level name fade
+        self.level_name_alpha = 255
         
         # Only stop music if we're changing levels (not on retry)
         if not keep_time:  # keep_time=True means it's a retry
@@ -284,40 +289,120 @@ class Game:
         # Use the initialized font
         font = self.font
         
-        # Draw level name
-        level_text = f"Level: {self.current_level.display_name}"
-        level_surface = font.render(level_text, True, (255, 255, 255))
-        level_rect = level_surface.get_rect(topleft=(10, 10))
+        # Always position score in top left
+        score_y = 10
         
-        # Semi-transparent background for the level text
-        padding = 5
-        bg_rect = level_rect.inflate(padding * 2, padding * 2)
-        bg_surface = pygame.Surface(bg_rect.size, pygame.SRCALPHA)
-        pygame.draw.rect(bg_surface, (0, 0, 0, 128), bg_surface.get_rect())
-        self.window.blit(bg_surface, bg_rect)
-        self.window.blit(level_surface, level_rect)
-
-        # NEW: Faint "Press ESC to skip" if a cutscene exists
-        if self.current_level.current_cutscene:
-            skip_text = "Esc = Skip"
-            skip_surface = font.render(skip_text, True, (160, 160, 160))
-            skip_rect = skip_surface.get_rect(topleft=(10, level_rect.bottom + 10))
-            self.window.blit(skip_surface, skip_rect)
-
-        # Show Buildings, Food, or Boss Health
+        # Show Buildings or Food count in consistent position
         if self.current_level.level_data.get('is_boss', False):
-            score_text = f"Boss Health: {self.current_level.boss_health}%"  # We'll implement boss health later
+            pass  # Boss health will be drawn above boss
         elif self.current_level.level_data['biome'] == 'city':
             score_text = f"Buildings: {self.current_level.buildings_destroyed}/{self.current_level.required_buildings}"
+            score_surface = font.render(score_text, True, (255, 255, 255))
+            score_rect = score_surface.get_rect(topleft=(10, score_y))
+            self.window.blit(score_surface, score_rect)
         else:
             score_text = f"Food: {self.current_level.food_count}/{self.current_level.required_food}"
+            score_surface = font.render(score_text, True, (255, 255, 255))
+            score_rect = score_surface.get_rect(topleft=(10, score_y))
+            self.window.blit(score_surface, score_rect)
 
-        score_surface = font.render(score_text, True, (255, 255, 255))
-        score_rect = score_surface.get_rect(topright=(self.width - 10, 10))
-        
-        # Background for score
-        score_bg_rect = score_rect.inflate(padding * 2, padding * 2)
-        score_bg_surface = pygame.Surface(score_bg_rect.size, pygame.SRCALPHA)
-        pygame.draw.rect(score_bg_surface, (0, 0, 0, 128), score_bg_surface.get_rect())
-        self.window.blit(score_bg_surface, score_bg_rect)
-        self.window.blit(score_surface, score_rect) 
+        # Draw level name only during cutscene or while fading
+        if self.current_level.current_cutscene or self.level_name_alpha > 0:
+            # If cutscene just ended, start fading
+            if not self.current_level.current_cutscene:
+                self.level_name_alpha = max(0, self.level_name_alpha - 5)  # Fade speed
+            
+            level_text = f"Level: {self.current_level.display_name}"
+            level_surface = font.render(level_text, True, (255, 255, 255))
+            level_rect = level_surface.get_rect(midtop=(self.width // 2, 10))
+            
+            # Semi-transparent background for the level text
+            padding = 5
+            bg_rect = level_rect.inflate(padding * 2, padding * 2)
+            bg_surface = pygame.Surface(bg_rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(bg_surface, (0, 0, 0, self.level_name_alpha // 2), bg_surface.get_rect())
+            
+            # Apply fade to text
+            level_surface.set_alpha(self.level_name_alpha)
+            
+            self.window.blit(bg_surface, bg_rect)
+            self.window.blit(level_surface, level_rect)
+
+        # Draw floating streak number above snake if applicable
+        if (self.snake.food_streak > 0 and 
+            self.current_level.level_data['biome'] != 'desert'):
+            
+            # Create a smaller font for the floating number
+            try:
+                small_font = pygame.font.Font("assets/PressStart2P-Regular.ttf", 12)
+            except:
+                small_font = pygame.font.SysFont(None, 24)
+            
+            # Draw small floating number above snake's head
+            streak_text = f"{self.snake.food_streak}"
+            streak_surface = small_font.render(streak_text, True, (255, 255, 0))
+            
+            # Position above snake's head with slight offset
+            offset_y = 25  # Pixels above snake's head
+            streak_rect = streak_surface.get_rect(
+                centerx=self.snake.x + self.snake.block_size // 2,
+                bottom=self.snake.y - offset_y
+            )
+            
+            # Add a small dark outline/background for better visibility
+            padding = 2
+            bg_rect = streak_rect.inflate(padding * 2, padding * 2)
+            bg_surface = pygame.Surface(bg_rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(bg_surface, (0, 0, 0, 160), bg_surface.get_rect())
+            self.window.blit(bg_surface, bg_rect)
+            self.window.blit(streak_surface, streak_rect)
+
+        # Draw boss health bar if in boss level
+        if self.current_level.level_data.get('is_boss', False) and hasattr(self.current_level, 'boss'):
+            boss = self.current_level.boss
+            
+            # Draw health bar above boss
+            bar_width = 100
+            bar_height = 8
+            offset_y = 30  # Pixels above boss
+            
+            # Position bar above boss
+            bar_x = boss.x + (boss.width - bar_width) // 2
+            bar_y = boss.y - offset_y
+            
+            # Draw background (red bar)
+            pygame.draw.rect(self.window, (200, 0, 0), 
+                           [bar_x, bar_y, bar_width, bar_height])
+            
+            # Draw filled portion (green health)
+            health_width = int(bar_width * (self.current_level.boss_health / 100))
+            if health_width > 0:
+                pygame.draw.rect(self.window, (0, 200, 0),
+                               [bar_x, bar_y, health_width, bar_height])
+            
+            # Add percentage text above bar
+            try:
+                small_font = pygame.font.Font("assets/PressStart2P-Regular.ttf", 12)
+            except:
+                small_font = pygame.font.SysFont(None, 24)
+            
+            health_text = f"{self.current_level.boss_health}%"
+            health_surface = small_font.render(health_text, True, (255, 255, 255))
+            health_rect = health_surface.get_rect(
+                centerx=bar_x + bar_width//2,
+                bottom=bar_y - 2
+            )
+            
+            # Add dark background for text
+            text_bg_rect = health_rect.inflate(4, 4)
+            text_bg_surface = pygame.Surface(text_bg_rect.size, pygame.SRCALPHA)
+            pygame.draw.rect(text_bg_surface, (0, 0, 0, 160), text_bg_surface.get_rect())
+            self.window.blit(text_bg_surface, text_bg_rect)
+            self.window.blit(health_surface, health_rect)
+
+        # Draw skip text in top right if cutscene exists
+        if self.current_level.current_cutscene:
+            skip_text = "Press Esc to Skip"
+            skip_surface = font.render(skip_text, True, (160, 160, 160))
+            skip_rect = skip_surface.get_rect(topright=(self.width - 10, 10))
+            self.window.blit(skip_surface, skip_rect) 
