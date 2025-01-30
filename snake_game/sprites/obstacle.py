@@ -595,6 +595,27 @@ class Pond(Obstacle):
         height = self.variations['height'] * 12
         return pygame.Rect(self.x, self.y, width, height)
 
+    def get_no_spawn_rects(self):
+        """
+        Return both the base hitbox and a buffer zone above the lake
+        so that food cannot spawn floating above it.
+        """
+        rects = []
+        base_rect = self.get_hitbox()
+        if base_rect is not None:
+            rects.append(base_rect)
+            
+            # Add a buffer zone above the lake
+            buffer_rect = pygame.Rect(
+                base_rect.x,
+                base_rect.y - self.block_size,  # Extend one block up
+                base_rect.width,
+                self.block_size  # Just the buffer height
+            )
+            rects.append(buffer_rect)
+
+        return rects
+
 class Building(Obstacle):
     def __init__(self, x, y, variations, block_size=20):
         super().__init__(x, y, variations, block_size)
@@ -1180,12 +1201,23 @@ class Lake(Obstacle):
 
     def get_no_spawn_rects(self):
         """
-        Return a bounding rect covering the entire lake surface.
+        Return both the base hitbox and a buffer zone above the lake
+        so that food cannot spawn floating above it.
         """
         rects = []
-        water_hitbox = self.get_hitbox()  # or a custom water rect if needed
-        if water_hitbox is not None:
-            rects.append(water_hitbox)
+        base_rect = self.get_hitbox()
+        if base_rect is not None:
+            rects.append(base_rect)
+            
+            # Add a buffer zone above the lake
+            buffer_rect = pygame.Rect(
+                base_rect.x,
+                base_rect.y - self.block_size,  # Extend one block up
+                base_rect.width,
+                self.block_size  # Just the buffer height
+            )
+            rects.append(buffer_rect)
+
         return rects
 
 class Rubble(Obstacle):

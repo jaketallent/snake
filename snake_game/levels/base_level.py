@@ -317,13 +317,9 @@ class BaseLevel:
     def spawn_food(self):
         max_attempts = 100
         for attempt in range(max_attempts):
+            # Always align to block_size grid first
             x = round(random.randrange(0, self.game.width - self.block_size) / self.block_size) * self.block_size
             y = round(random.randrange(self.play_area['top'], self.play_area['bottom'] - self.block_size) / self.block_size) * self.block_size
-
-            # Snap to the city grid if needed
-            if self.level_data['biome'] == 'city':
-                x = round(x / self.block_size) * self.block_size
-                y = round(y / self.block_size) * self.block_size
 
             # 1) Check standard collisions & BFS reachability
             if not self.is_safe_position(x, y):
@@ -342,9 +338,9 @@ class BaseLevel:
             self.food = Food(x, y, random.choice(self.level_data['critters']))
             return
 
-        # If we exhausted attempts, fallback to center
-        fallback_x = self.game.width // 2
-        fallback_y = (self.play_area['top'] + self.play_area['bottom']) // 2
+        # If we exhausted attempts, fallback to center (also grid-aligned)
+        fallback_x = (self.game.width // 2) // self.block_size * self.block_size
+        fallback_y = ((self.play_area['top'] + self.play_area['bottom']) // 2) // self.block_size * self.block_size
         self.food = Food(fallback_x, fallback_y, random.choice(self.level_data['critters']))
 
     def _overlaps_building_top(self, x, y):
@@ -364,47 +360,44 @@ class BaseLevel:
         return False
 
     def is_safe_position(self, x, y):
-        """
-        Check if a position is free of collisions with obstacles or snake segments.
-        Now we simply loop each obstacle's 'no spawn' rects so we skip them.
-        """
+        """Check if a position is safe for food spawning"""
+        # Create rect for the food
         food_rect = pygame.Rect(x, y, self.block_size, self.block_size)
         
-        # 1) Check each obstacle's no-spawn rects
+        # Add a small buffer zone above for visual clarity
+        buffer_rect = food_rect.copy()
+        buffer_rect.height += self.block_size  # Extend checking area above the food
+        buffer_rect.y -= self.block_size       # Move the buffer up
+        
+        # Check collision with obstacles
         for obstacle in self.obstacles:
-            for blocked_rect in obstacle.get_no_spawn_rects():
-                # Handle both single rect and list of rects
-                if isinstance(blocked_rect, list):
-                    # If it's a list of rects, check each one
-                    for rect in blocked_rect:
-                        # Only enlarge the obstacle area in the city.
-                        if self.level_data['biome'] == 'city':
-                            # Increase the inflation to 20px
-                            inflated_rect = rect.inflate(20, 20)
-                            inflated_rect.center = rect.center
-                        else:
-                            inflated_rect = rect
-
-                        if food_rect.colliderect(inflated_rect):
+            # Skip if obstacle has no hitbox
+            if not hasattr(obstacle, 'get_no_spawn_rects'):
+                hitbox = obstacle.get_hitbox()
+                if hitbox is None:
+                    continue
+                if isinstance(hitbox, list):
+                    for box in hitbox:
+                        if buffer_rect.colliderect(box):
                             return False
-                else:
-                    # Handle single rect
-                    if self.level_data['biome'] == 'city':
-                        inflated_rect = blocked_rect.inflate(20, 20)
-                        inflated_rect.center = blocked_rect.center
-                    else:
-                        inflated_rect = blocked_rect
-
-                    if food_rect.colliderect(inflated_rect):
-                        return False
-
-        # 2) Optionally check collision with snake's body if you don't want to spawn on snake
-        if self.game.snake:
-            for segment in self.game.snake.body:
-                segment_rect = pygame.Rect(segment[0], segment[1], 
-                                         self.block_size, self.block_size)
-                if food_rect.colliderect(segment_rect):
+                elif buffer_rect.colliderect(hitbox):
                     return False
+                continue
+
+            # For obstacles with no_spawn_rects (buildings, lakes, etc)
+            no_spawn_rects = obstacle.get_no_spawn_rects()
+            for rect in no_spawn_rects:
+                if buffer_rect.colliderect(rect):
+                    return False
+        
+        # Check collision with snake
+        for segment in self.game.snake.body:
+            if food_rect.colliderect(pygame.Rect(segment[0], segment[1], self.block_size, self.block_size)):
+                return False
+        
+        # Check if within play area
+        if not (self.play_area['top'] <= y <= self.play_area['bottom'] - self.block_size):
+            return False
         
         return True
 
