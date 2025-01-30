@@ -387,7 +387,7 @@ class Game:
             # Draw health bar above boss
             bar_width = 100
             bar_height = 8
-            offset_y = 30  # Pixels above boss
+            offset_y = 80  # Increased from 30 to 80 to position higher above mech
             
             # Position bar above boss
             bar_x = boss.x + (boss.width - bar_width) // 2
@@ -419,7 +419,7 @@ class Game:
             # Add dark background for text
             text_bg_rect = health_rect.inflate(4, 4)
             text_bg_surface = pygame.Surface(text_bg_rect.size, pygame.SRCALPHA)
-            pygame.draw.rect(text_bg_surface, (0, 0, 0, 160), text_bg_surface.get_rect())
+            pygame.draw.rect(text_bg_surface, (0, 0, 0, 180), text_bg_surface.get_rect())
             self.window.blit(text_bg_surface, text_bg_rect)
             self.window.blit(health_surface, health_rect)
 

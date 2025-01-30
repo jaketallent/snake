@@ -11,6 +11,11 @@ class TankBoss:
         self.height = 80  # Tank is 4 blocks high
         self.block_size = 20
         
+        # Component dimensions
+        self.tread_height = 60
+        self.torso_height = 60
+        self.mount_height = 20
+        
         # Movement
         self.x = x
         self.y = y
@@ -121,54 +126,40 @@ class TankBoss:
         if self.target_x is None:
             return
             
-        # Calculate angle to target
-        target_angle = math.degrees(math.atan2(
-            self.target_y - self.y,
-            self.target_x - self.x
-        ))
+        # Calculate direction to target
+        dx = self.target_x - self.x
+        dy = self.target_y - self.y
+        distance = math.hypot(dx, dy)
         
-        # Calculate difference in angles
-        angle_diff = (target_angle - self.angle + 180) % 360 - 180
-        
-        # Turn towards target more aggressively
-        if abs(angle_diff) > self.turn_speed:
-            self.angle += self.turn_speed * (1 if angle_diff > 0 else -1)
+        if distance > 0:
+            # Normalize direction
+            dx = dx / distance
+            dy = dy / distance
+            
+            # Accelerate/decelerate based on distance
+            if distance > self.velocity:
+                self.velocity = min(self.velocity + self.acceleration, self.max_speed)
+            else:
+                self.velocity = max(self.velocity - self.acceleration, 0)
+            
+            # Move towards target
+            self.x += dx * self.velocity
+            self.y += dy * self.velocity
+            
+            # Update track animation based on movement
+            movement_speed = self.velocity
+            self.left_track_offset += movement_speed
+            self.right_track_offset += movement_speed
         else:
-            self.angle = target_angle
-        
-        # More aggressive acceleration/deceleration
-        if abs(angle_diff) < 60:  # Increased angle threshold for movement
-            self.velocity = min(self.velocity + self.acceleration, self.max_speed)
-            if self.state == 'chase':  # Move even faster when chasing
-                self.velocity = min(self.velocity + self.acceleration, self.max_speed * 1.2)
-        else:
+            # Decelerate when at target
             self.velocity = max(self.velocity - self.acceleration, 0)
         
-        # Move tank
-        angle_rad = math.radians(self.angle)
-        self.x += math.cos(angle_rad) * self.velocity
-        self.y += math.sin(angle_rad) * self.velocity
-        
-        # Keep tank in bounds
+        # Keep mech in bounds
         self.x = max(0, min(self.x, self.game.width - self.width))
         self.y = max(
             self.game.current_level.play_area['top'],
             min(self.y, self.game.current_level.play_area['bottom'] - self.height)
         )
-        
-        # Animate tracks based on movement
-        track_speed = self.velocity
-        if abs(angle_diff) > 5:  # Turning
-            # Tracks move in opposite directions when turning
-            self.left_track_offset += -track_speed if angle_diff > 0 else track_speed
-            self.right_track_offset += track_speed if angle_diff > 0 else -track_speed
-        else:  # Moving straight
-            self.left_track_offset += track_speed
-            self.right_track_offset += track_speed
-        
-        # Keep track offsets in bounds
-        self.left_track_offset %= 20
-        self.right_track_offset %= 20
 
     def _update_turret(self):
         # Point turret at snake with prediction
@@ -223,10 +214,16 @@ class TankBoss:
         else:
             angles = [base_angle]
         
-        # Fire projectiles
-        barrel_length = 50  # Length of barrel for projectile spawn
-        spawn_x = self.x + self.width/2 + math.cos(base_angle) * barrel_length
-        spawn_y = self.y + self.height/2 + math.sin(base_angle) * barrel_length
+        # Calculate barrel end position relative to mech center
+        barrel_length = 60  # Length of barrel for projectile spawn
+        
+        # Start from the turret's position (center of rotation)
+        spawn_x = self.x + self.width/2
+        spawn_y = self.y + self.height - self.tread_height - self.torso_height
+        
+        # Add the rotated barrel offset
+        spawn_x += math.cos(base_angle) * barrel_length
+        spawn_y += math.sin(base_angle) * barrel_length
         
         for angle in angles:
             self.projectiles.append({
@@ -234,7 +231,7 @@ class TankBoss:
                 'y': spawn_y,
                 'dx': math.cos(angle) * self.projectile_speed,
                 'dy': math.sin(angle) * self.projectile_speed,
-                'lifetime': 90  # Reduced lifetime since projectiles are faster
+                'lifetime': 90
             })
 
     def take_damage(self):
@@ -243,63 +240,212 @@ class TankBoss:
         return 10  # Return damage amount
 
     def draw(self, surface):
-        # Create a surface for the tank that can be rotated
-        tank_surface = pygame.Surface((self.width + 20, self.height + 20), pygame.SRCALPHA)
+        # Create an even larger surface to accommodate rotation
+        surface_width = self.width + 160  # Increased more for turret rotation
+        surface_height = self.height + 160
+        mech_surface = pygame.Surface((surface_width, surface_height), pygame.SRCALPHA)
         
-        # Draw tank body
-        body_color = self.colors['damage'] if self.damage_flash else self.colors['body']
-        pygame.draw.rect(tank_surface, body_color, 
-                        [10, 10, self.width, self.height])
+        # Center offset
+        offset_x = surface_width // 2 - self.width // 2
+        offset_y = surface_height // 2 - self.height // 2
         
-        # Draw tracks
-        track_height = 15
-        for i, track_y in enumerate([10 - 5, 10 + self.height - track_height + 5]):
-            track_offset = self.left_track_offset if i == 0 else self.right_track_offset
-            pygame.draw.rect(tank_surface, self.colors['tracks'],
-                           [0, track_y, self.width + 20, track_height])
-            
-            # Draw track segments
-            for j in range(8):
-                segment_x = (j * 20 + track_offset) % (self.width + 20)
-                pygame.draw.rect(tank_surface, self.colors['body'],
-                               [segment_x, track_y + 3, 15, track_height - 6])
+        colors = {
+            'main': (70, 75, 80),      # Gunmetal gray
+            'dark': (40, 45, 50),      # Dark gray for shadows
+            'accent': (120, 30, 30),   # Dark red accents
+            'glow': (0, 255, 255),     # Cyan for energy/lights
+            'window': (200, 255, 255)  # Light cyan for cockpit
+        }
         
-        # Draw turret
-        turret_surface = pygame.Surface((40, 40), pygame.SRCALPHA)
-        pygame.draw.circle(turret_surface, self.colors['turret'], (20, 20), 20)
-        pygame.draw.rect(turret_surface, self.colors['barrel'], [20, 15, 40, 10])
+        if self.damage_flash:
+            colors['main'] = (255, 100, 100)
         
-        # Rotate turret relative to tank body
-        relative_angle = self.turret_angle - self.angle
-        rotated_turret = pygame.transform.rotate(turret_surface, -relative_angle)
+        # Draw treads instead of legs
+        tread_width = 25
+        tread_height = 60
+        tread_segment = 10
+        
+        # Move treads up by 10 pixels to overlap with body
+        tread_offset = 10  # Amount to move treads up
+        
+        # Left tread
+        pygame.draw.rect(mech_surface, colors['dark'],
+                        [offset_x + 15, offset_y + self.height - tread_height - tread_offset,
+                         tread_width, tread_height])
+        # Tread segments
+        for i in range(0, tread_height, tread_segment):
+            y_pos = offset_y + self.height - tread_height + i + (self.left_track_offset % tread_segment) - tread_offset
+            pygame.draw.rect(mech_surface, colors['main'],
+                            [offset_x + 17, y_pos, tread_width - 4, tread_segment - 2])
+        
+        # Right tread
+        pygame.draw.rect(mech_surface, colors['dark'],
+                        [offset_x + self.width - tread_width - 15,
+                         offset_y + self.height - tread_height - tread_offset,
+                         tread_width, tread_height])
+        # Tread segments
+        for i in range(0, tread_height, tread_segment):
+            y_pos = offset_y + self.height - tread_height + i + (self.right_track_offset % tread_segment) - tread_offset
+            pygame.draw.rect(mech_surface, colors['main'],
+                            [offset_x + self.width - tread_width - 13, y_pos,
+                             tread_width - 4, tread_segment - 2])
+        
+        # Draw torso - now more angular and mech-like
+        torso_width = self.width - 40
+        torso_height = 60
+        
+        # Lower torso (waist)
+        pygame.draw.polygon(mech_surface, colors['main'], [
+            (offset_x + 30, offset_y + self.height - tread_height - 10),  # Left bottom
+            (offset_x + self.width - 30, offset_y + self.height - tread_height - 10),  # Right bottom
+            (offset_x + self.width - 20, offset_y + self.height - tread_height - 30),  # Right top
+            (offset_x + 20, offset_y + self.height - tread_height - 30),  # Left top
+        ])
+        
+        # Upper torso (chest)
+        pygame.draw.polygon(mech_surface, colors['main'], [
+            (offset_x + 20, offset_y + self.height - tread_height - 30),  # Left bottom
+            (offset_x + self.width - 20, offset_y + self.height - tread_height - 30),  # Right bottom
+            (offset_x + self.width - 25, offset_y + self.height - tread_height - torso_height),  # Right top
+            (offset_x + 25, offset_y + self.height - tread_height - torso_height),  # Left top
+        ])
+        
+        # Armor plates on chest
+        plate_count = 3
+        plate_width = 15
+        plate_spacing = (torso_width - plate_width * plate_count) // (plate_count - 1)
+        for i in range(plate_count):
+            x = offset_x + 35 + i * (plate_width + plate_spacing)
+            pygame.draw.rect(mech_surface, colors['dark'],
+                            [x, offset_y + self.height - tread_height - torso_height + 10,
+                             plate_width, torso_height - 20])
+        
+        # Cockpit (now more centered in chest)
+        cockpit_width = 30
+        cockpit_height = 20
+        pygame.draw.rect(mech_surface, colors['dark'],
+                        [offset_x + self.width//2 - cockpit_width//2,
+                         offset_y + self.height - tread_height - torso_height + 15,
+                         cockpit_width, cockpit_height])
+        # Cockpit window (glowing)
+        window_width = 25
+        window_height = 15
+        pygame.draw.rect(mech_surface, colors['window'],
+                        [offset_x + self.width//2 - window_width//2,
+                         offset_y + self.height - tread_height - torso_height + 17,
+                         window_width, window_height])
+        
+        # Shoulder pads
+        shoulder_width = 35
+        shoulder_height = 25
+        # Left shoulder
+        pygame.draw.rect(mech_surface, colors['dark'],
+                        [offset_x + 5, 
+                         offset_y + self.height - tread_height - torso_height + 5,
+                         shoulder_width, shoulder_height])
+        # Right shoulder
+        pygame.draw.rect(mech_surface, colors['dark'],
+                        [offset_x + self.width - shoulder_width - 5,
+                         offset_y + self.height - tread_height - torso_height + 5,
+                         shoulder_width, shoulder_height])
+        
+        # Shoulder weapons (more angular)
+        weapon_width = 30
+        weapon_height = 20
+        # Left weapon
+        pygame.draw.polygon(mech_surface, colors['dark'], [
+            (offset_x + 10, offset_y + self.height - tread_height - torso_height + 10),  # Base left
+            (offset_x + 40, offset_y + self.height - tread_height - torso_height + 10),  # Base right
+            (offset_x + 45, offset_y + self.height - tread_height - torso_height - 10),  # Tip right
+            (offset_x + 5, offset_y + self.height - tread_height - torso_height - 10),   # Tip left
+        ])
+        # Right weapon
+        pygame.draw.polygon(mech_surface, colors['dark'], [
+            (offset_x + self.width - 40, offset_y + self.height - tread_height - torso_height + 10),
+            (offset_x + self.width - 10, offset_y + self.height - tread_height - torso_height + 10),
+            (offset_x + self.width - 5, offset_y + self.height - tread_height - torso_height - 10),
+            (offset_x + self.width - 45, offset_y + self.height - tread_height - torso_height - 10),
+        ])
+        
+        # Main turret mount (neck)
+        mount_width = 30
+        mount_height = 20
+        pygame.draw.rect(mech_surface, colors['dark'],
+                        [offset_x + self.width//2 - mount_width//2,
+                         offset_y + self.height - tread_height - torso_height - mount_height,
+                         mount_width, mount_height])
+        
+        # Create and draw the rotating turret (head)
+        turret_surface = pygame.Surface((120, 120), pygame.SRCALPHA)
+        
+        # Position everything relative to center point
+        center_x = turret_surface.get_width() // 2
+        center_y = turret_surface.get_height() // 2
+        
+        # All components are drawn centered around the center point
+        head_width = 40
+        head_height = 30
+        gun_width = 40
+        gun_height = 10
+        
+        # Head base - centered both horizontally and vertically
+        pygame.draw.rect(turret_surface, colors['main'], 
+                        [center_x - head_width//2,  # Centered horizontally
+                         center_y - head_height//2,  # Centered vertically
+                         head_width, head_height])
+        
+        # Visor - centered in head
+        pygame.draw.rect(turret_surface, colors['window'], 
+                        [center_x - 15,  # Centered horizontally
+                         center_y - head_height//2 + 5,  # Relative to head center
+                         30, 10])
+        
+        # Main gun - centered and extending right from center
+        pygame.draw.rect(turret_surface, colors['dark'], 
+                        [center_x,  # Start at center
+                         center_y - gun_height//2,  # Centered vertically
+                         gun_width, gun_height])
+        
+        # Energy core - slightly left of center
+        core_glow = abs(math.sin(pygame.time.get_ticks() / 200)) * 100
+        pygame.draw.circle(turret_surface, (*colors['glow'], 50 + core_glow), 
+                          (center_x - 5, center_y), 8)
+        pygame.draw.circle(turret_surface, colors['glow'], 
+                          (center_x - 5, center_y), 5)
+        
+        # Rotate turret around center point
+        rotated_turret = pygame.transform.rotate(turret_surface, -self.turret_angle)
         turret_rect = rotated_turret.get_rect(
-            center=(tank_surface.get_width()//2, tank_surface.get_height()//2)
+            center=(mech_surface.get_width()//2,  # Center horizontally
+                   offset_y + self.height - tread_height - torso_height)  # Top of neck
         )
-        tank_surface.blit(rotated_turret, turret_rect)
+        mech_surface.blit(rotated_turret, turret_rect)
         
-        # Rotate entire tank
-        rotated_tank = pygame.transform.rotate(tank_surface, -self.angle)
-        tank_rect = rotated_tank.get_rect(
+        # Don't rotate the entire mech anymore, just translate it
+        mech_rect = mech_surface.get_rect(
             center=(self.x + self.width//2, self.y + self.height//2)
         )
-        surface.blit(rotated_tank, tank_rect)
+        surface.blit(mech_surface, mech_rect)
         
-        # Draw projectiles with trails
+        # Draw projectiles with energy trails
         for proj in self.projectiles:
-            # Draw trail
-            trail_length = 3
+            # Draw energy trail
+            trail_length = 4
             for i in range(trail_length):
                 trail_x = int(proj['x'] - proj['dx'] * i * 0.5)
                 trail_y = int(proj['y'] - proj['dy'] * i * 0.5)
-                trail_radius = 5 - (i * 1.5)
-                trail_alpha = 255 - (i * 80)
+                trail_radius = 6 - (i * 1.5)
+                trail_alpha = 255 - (i * 60)
                 
-                trail_surface = pygame.Surface((trail_radius * 2 + 2, trail_radius * 2 + 2), pygame.SRCALPHA)
-                pygame.draw.circle(trail_surface, (255, 200, 0, trail_alpha), 
+                trail_surface = pygame.Surface((trail_radius * 2 + 2, trail_radius * 2 + 2),
+                                            pygame.SRCALPHA)
+                pygame.draw.circle(trail_surface, (*colors['glow'], trail_alpha),
                                  (trail_radius + 1, trail_radius + 1), trail_radius)
-                surface.blit(trail_surface, 
+                surface.blit(trail_surface,
                            (trail_x - trail_radius, trail_y - trail_radius))
             
-            # Draw projectile
-            pygame.draw.circle(surface, (255, 220, 0), 
-                             (int(proj['x']), int(proj['y'])), 5) 
+            # Draw energy projectile
+            pygame.draw.circle(surface, colors['glow'],
+                             (int(proj['x']), int(proj['y'])), 6)
+            pygame.draw.circle(surface, colors['window'],
+                             (int(proj['x']), int(proj['y'])), 4) 
