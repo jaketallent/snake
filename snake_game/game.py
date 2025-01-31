@@ -187,10 +187,12 @@ class Game:
             self.current_level.update()
             self.snake.update_power_up()
             
-            # Draw game state
+            # Draw game state in new order
             self.current_level.draw(self.window)
+            if not self.current_level.current_cutscene:  # Only draw health when not in cutscene
+                self.draw_boss_health()  # Draw health bar before cutscene
             if self.current_level.current_cutscene:
-                self.current_level.current_cutscene.draw(self.window)
+                self.current_level.current_cutscene.draw(self.window)  # Draw cutscene last
             self.draw_ui()
             
             # Check collisions and game state
@@ -380,14 +382,14 @@ class Game:
             self.window.blit(bg_surface, bg_rect)
             self.window.blit(streak_surface, streak_rect)
 
-        # Draw boss health bar if in boss level
+    def draw_boss_health(self):
         if self.current_level.level_data.get('is_boss', False) and hasattr(self.current_level, 'boss'):
             boss = self.current_level.boss
             
             # Draw health bar above boss
             bar_width = 100
             bar_height = 8
-            offset_y = 80  # Increased from 30 to 80 to position higher above mech
+            offset_y = 80
             
             # Position bar above boss
             bar_x = boss.x + (boss.width - bar_width) // 2
@@ -421,11 +423,4 @@ class Game:
             text_bg_surface = pygame.Surface(text_bg_rect.size, pygame.SRCALPHA)
             pygame.draw.rect(text_bg_surface, (0, 0, 0, 180), text_bg_surface.get_rect())
             self.window.blit(text_bg_surface, text_bg_rect)
-            self.window.blit(health_surface, health_rect)
-
-        # Draw skip text in top right if cutscene exists
-        if self.current_level.current_cutscene:
-            skip_text = "Esc to Skip"
-            skip_surface = font.render(skip_text, True, (160, 160, 160))
-            skip_rect = skip_surface.get_rect(topright=(self.width - 10, 10))
-            self.window.blit(skip_surface, skip_rect) 
+            self.window.blit(health_surface, health_rect) 
