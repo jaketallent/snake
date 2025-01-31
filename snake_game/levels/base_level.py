@@ -547,6 +547,13 @@ class BaseLevel:
                             snake.die()
                             return True
 
+        # NEW: Store the original position for potential rollback
+        original_x, original_y = snake.x, snake.y
+        last_dx, last_dy = snake.dx, snake.dy
+        
+        # If the snake has new input this frame, we'll be more forgiving
+        has_new_input = snake.has_input_this_frame
+        
         # NEW: Snap first, then clamp
         if self.level_data['biome'] == 'city':
             # Calculate how far into the next tile we are
@@ -586,12 +593,16 @@ class BaseLevel:
             new_y = self.play_area['top']
             hit_wall = True
 
-        snake.move_to(new_x, new_y)
-
-        # Check obstacle collision - use a slightly smaller hitbox for more forgiving collisions
-        hitbox_size = int(snake.block_size * 0.8)  # 80% of block size
-        offset = (snake.block_size - hitbox_size) // 2  # Center the hitbox
-        snake_rect = pygame.Rect(new_x + offset, new_y + offset, hitbox_size, hitbox_size)
+        # NEW: Only temporarily move snake to check collision
+        temp_x, temp_y = new_x, new_y
+        
+        # Check obstacle collision with slightly smaller hitbox
+        hitbox_size = int(snake.block_size * 0.8)
+        offset = (snake.block_size - hitbox_size) // 2
+        snake_rect = pygame.Rect(temp_x + offset, temp_y + offset, hitbox_size, hitbox_size)
+        
+        will_collide = False
+        colliding_obstacle = None
         
         for obstacle in self.obstacles:
             hitbox = obstacle.get_hitbox()
@@ -612,18 +623,80 @@ class BaseLevel:
                     if snake.is_powered_up:
                         obstacle.start_destruction()
                         snake.destroy_obstacle()
-                        return False
+                        will_collide = False
                     else:
-                        snake.die()
-                        return True
+                        will_collide = True
+                        colliding_obstacle = obstacle
+                        break
+
+        # NEW: If we would collide but have recent input, try the previous position
+        if will_collide and snake.has_input_this_frame:
+            # Create a rect for the previous position
+            prev_rect = pygame.Rect(
+                original_x + offset, 
+                original_y + offset, 
+                hitbox_size, hitbox_size
+            )
+            
+            # Check if the previous position was safe
+            was_safe = True
+            for obstacle in self.obstacles:
+                hitbox = obstacle.get_hitbox()
+                if hitbox is not None:
+                    if isinstance(hitbox, list):
+                        if any(box.colliderect(prev_rect) for box in hitbox):
+                            was_safe = False
+                            break
+                    elif hitbox.colliderect(prev_rect):
+                        was_safe = False
+                        break
+            
+            if was_safe:
+                # Stay at previous position and apply new input
+                snake.move_to(original_x, original_y)
+                # Clear collision flag since we're safe
+                will_collide = False
+                # Give a small boost to help with tight turns
+                if snake.dx != 0:  # If moving horizontally
+                    # Allow slight vertical position adjustment
+                    test_y = original_y + (snake.dy * 0.5)  # Try moving halfway
+                    test_rect = prev_rect.copy()
+                    test_rect.y = test_y + offset
+                    if not any(obstacle.get_hitbox() is not None and 
+                              (isinstance(obstacle.get_hitbox(), list) and 
+                               any(box.colliderect(test_rect) for box in obstacle.get_hitbox()) or
+                               obstacle.get_hitbox().colliderect(test_rect))
+                              for obstacle in self.obstacles):
+                        snake.move_to(original_x, test_y)
+                elif snake.dy != 0:  # If moving vertically
+                    # Allow slight horizontal position adjustment
+                    test_x = original_x + (snake.dx * 0.5)  # Try moving halfway
+                    test_rect = prev_rect.copy()
+                    test_rect.x = test_x + offset
+                    if not any(obstacle.get_hitbox() is not None and 
+                              (isinstance(obstacle.get_hitbox(), list) and 
+                               any(box.colliderect(test_rect) for box in obstacle.get_hitbox()) or
+                               obstacle.get_hitbox().colliderect(test_rect))
+                              for obstacle in self.obstacles):
+                        snake.move_to(test_x, original_y)
+            else:
+                # Actually move to the collision position
+                snake.move_to(temp_x, temp_y)
+        else:
+            # No collision or no new input, move normally
+            snake.move_to(temp_x, temp_y)
+
+        if will_collide:
+            snake.die()
+            return True
         
-        # If we clamped to a wall, let the snake bounce after obstacle checks
+        # If we clamped to a wall, let the snake bounce
         if hit_wall:
             snake.bounce()
             return False
         
         # Check self collision last
-        head = [new_x, new_y]
+        head = [snake.x, snake.y]
         if head in snake.body[:-1] and len(snake.body) > 1:
             snake.die()
             return True

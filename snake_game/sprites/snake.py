@@ -29,6 +29,9 @@ class Snake:
         self.can_spit = True
         self.spit_cooldown = 0
         self.spit_cooldown_time = 15
+        self.has_input_this_frame = False
+        self.recent_inputs = []  # Track recent input timestamps
+        self.input_buffer_frames = 8  # Increased from 5 to 8 frames
         
     def reset(self, x, y):
         self.x = x
@@ -52,28 +55,47 @@ class Snake:
     def handle_input(self, event):
         if event.type == pygame.KEYDOWN:
             # Only prevent complete reversal of direction
-            if event.key == pygame.K_LEFT and self.dx != self.block_size:  # Can't go left if moving right
+            if event.key == pygame.K_LEFT and self.dx != self.block_size:
                 self.dx = -self.block_size
                 self.dy = 0
                 self.wall_bounce_cooldown = 0
-            elif event.key == pygame.K_RIGHT and self.dx != -self.block_size:  # Can't go right if moving left
+                self.has_input_this_frame = True
+                self.recent_inputs.append(pygame.time.get_ticks())  # Add timestamp
+            elif event.key == pygame.K_RIGHT and self.dx != -self.block_size:
                 self.dx = self.block_size
                 self.dy = 0
                 self.wall_bounce_cooldown = 0
-            elif event.key == pygame.K_UP and self.dy != self.block_size:  # Can't go up if moving down
+                self.has_input_this_frame = True
+                self.recent_inputs.append(pygame.time.get_ticks())
+            elif event.key == pygame.K_UP and self.dy != self.block_size:
                 self.dy = -self.block_size
                 self.dx = 0
                 self.wall_bounce_cooldown = 0
-            elif event.key == pygame.K_DOWN and self.dy != -self.block_size:  # Can't go down if moving up
+                self.has_input_this_frame = True
+                self.recent_inputs.append(pygame.time.get_ticks())
+            elif event.key == pygame.K_DOWN and self.dy != -self.block_size:
                 self.dy = self.block_size
                 self.dx = 0
                 self.wall_bounce_cooldown = 0
+                self.has_input_this_frame = True
+                self.recent_inputs.append(pygame.time.get_ticks())
             
             # Add spit control (space bar)
             elif event.key == pygame.K_SPACE:
                 self.spit_venom()
     
     def update(self):
+        # Clear old inputs from buffer
+        current_time = pygame.time.get_ticks()
+        frame_duration = 1000 / 60  # Approximate milliseconds per frame
+        buffer_duration = frame_duration * self.input_buffer_frames
+        
+        self.recent_inputs = [t for t in self.recent_inputs 
+                             if current_time - t <= buffer_duration]
+        
+        # Consider input recent if we have any inputs in our buffer
+        self.has_input_this_frame = len(self.recent_inputs) > 0
+
         # Update spit cooldown
         if not self.can_spit:
             self.spit_cooldown += 1
