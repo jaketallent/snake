@@ -250,15 +250,15 @@ class TankBoss:
         offset_y = surface_height // 2 - self.height // 2
         
         colors = {
-            'main': (70, 75, 80),      # Gunmetal gray
-            'dark': (40, 45, 50),      # Dark gray for shadows
-            'accent': (120, 30, 30),   # Dark red accents
-            'glow': (0, 255, 255),     # Cyan for energy/lights
-            'window': (200, 255, 255)  # Light cyan for cockpit
+            'main': (45, 75, 45),      # Olive green
+            'dark': (20, 35, 65),      # Navy blue
+            'accent': (180, 140, 40),   # Brass/gold accent
+            'glow': (50, 255, 150),     # Bright green energy
+            'window': (140, 255, 200)  # Light green tint for cockpit
         }
         
         if self.damage_flash:
-            colors['main'] = (255, 100, 100)
+            colors['main'] = (255, 100, 100)  # Keep damage flash red
         
         # Draw treads instead of legs
         tread_width = 25
@@ -401,7 +401,7 @@ class TankBoss:
                          30, 10])
         
         # Main gun - centered and extending right from center
-        pygame.draw.rect(turret_surface, colors['dark'], 
+        pygame.draw.rect(turret_surface, colors['accent'], 
                         [center_x,  # Start at center
                          center_y - gun_height//2,  # Centered vertically
                          gun_width, gun_height])
