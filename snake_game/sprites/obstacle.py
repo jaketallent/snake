@@ -997,103 +997,89 @@ class Building(Obstacle):
 class Park(Obstacle):
     def __init__(self, x, y, variations, block_size=20):
         super().__init__(x, y, variations, block_size)
-        self.style = random.choice(['playground', 'grove'])
-        
-        width = variations['width'] * 16
-        height = variations['height'] * 12
+        self.width = variations['width']
+        self.height = variations['height']
         
         # Generate static grass pattern once
-        self.grass_pattern = []
-        for x in range(0, width, 4):
-            for y in range(0, height, 4):
-                if random.random() > 0.8:
-                    self.grass_pattern.append((x, y))
+        grass_density = 200
+        self.grass_pattern = [
+            (random.randint(0, self.width-4), random.randint(0, self.height-4))
+            for _ in range(grass_density)
+        ]
         
-        # Generate static elements
+        # Calculate safe margins and element sizes
+        margin = self.width // 6
+        element_width = self.width // 4  # Standard element width
+        
+        # Define safe zones that account for element widths
+        safe_positions = [
+            (margin + element_width//2, self.height//3),  # Left side
+            (self.width - margin - element_width//2, self.height//3),  # Right side
+            (self.width//2, self.height//2),  # Center
+            (margin + element_width//2, self.height*2//3),  # Bottom left
+            (self.width - margin - element_width//2, self.height*2//3)  # Bottom right
+        ]
+        
         self.elements = []
-        if self.style == 'playground':
-            # Add a swing set
+        for pos in safe_positions:
+            elem_type = random.choice(['swings', 'slide', 'monkey_bars', 'tree'])
+            
+            # Calculate element sizes based on available space
+            if elem_type == 'swings':
+                elem_width = min(self.width // 3, element_width)
+            elif elem_type == 'tree':
+                elem_width = min(self.width // 4, element_width)
+            else:
+                elem_width = element_width
+            
+            # Ensure x position keeps element within bounds
+            x = min(max(pos[0], margin + elem_width//2), 
+                   self.width - margin - elem_width//2)
+            
             self.elements.append({
-                'type': 'swings',
-                'x': width // 3,
-                'y': height // 2,
-                'width': 24
+                'type': elem_type,
+                'x': x,
+                'y': pos[1],
+                'width': elem_width
             })
-            
-            # Add either a slide or monkey bars
-            self.elements.append({
-                'type': random.choice(['slide', 'monkey_bars']),
-                'x': width * 2 // 3,
-                'y': height // 2,
-                'width': 16
-            })
-            
-            # Add a few trees around the edges
-            tree_spots = [(width//5, height*3//4), (width*4//5, height*3//4)]
-            for pos in tree_spots:
-                self.elements.append({
-                    'type': 'tree',
-                    'x': pos[0],
-                    'y': pos[1],
-                    'size': 16
-                })
-                
-        else:  # grove style
-            # Add trees in a natural-looking cluster
-            tree_positions = [
-                (width//3, height//3),
-                (width*2//3, height//3),
-                (width//2, height//2),
-                (width//4, height*2//3),
-                (width*3//4, height*2//3)
-            ]
-            
-            for pos in tree_positions:
-                self.elements.append({
-                    'type': 'tree',
-                    'x': pos[0],
-                    'y': pos[1],
-                    'size': random.randint(14, 18)  # Slightly bigger trees
-                })
 
     def draw_normal(self, surface):
-        width = self.variations['width'] * 16
-        height = self.variations['height'] * 12
-        
         # Draw base grass
         grass_colors = [(34, 139, 34), (0, 100, 0)]  # Light and dark green
         pygame.draw.rect(surface, grass_colors[0],
-                        [self.x, self.y, width, height])
+                        [self.x, self.y, self.width, self.height])
         
         # Draw stored grass pattern
         for x, y in self.grass_pattern:
             pygame.draw.rect(surface, grass_colors[1],
                            [self.x + x, self.y + y, 4, 4])
         
-        # Draw all elements
+        # Draw all elements with their stored sizes
         for elem in self.elements:
             if elem['type'] == 'swings':
-                self._draw_swings(surface, self.x + elem['x'], self.y + elem['y'], elem['width'])
+                self._draw_swings(surface, self.x + elem['x'], self.y + elem['y'], 
+                                elem['width'])
             elif elem['type'] == 'slide':
                 self._draw_slide(surface, self.x + elem['x'], self.y + elem['y'])
             elif elem['type'] == 'monkey_bars':
                 self._draw_monkey_bars(surface, self.x + elem['x'], self.y + elem['y'])
             elif elem['type'] == 'tree':
-                self._draw_tree(surface, self.x + elem['x'], self.y + elem['y'], elem['size'])
+                self._draw_tree(surface, self.x + elem['x'], self.y + elem['y'], 
+                              elem['width'])
 
-    def _draw_tree(self, surface, x, y, size):
+    def _draw_tree(self, surface, x, y, width):
         # Simple tree with brown trunk and green leaves
         trunk_color = (139, 69, 19)  # Brown
         leaf_color = (34, 139, 34)   # Forest green
         
         # Trunk
-        pygame.draw.rect(surface, trunk_color, [x - 2, y - size//4, 4, size//2])
+        pygame.draw.rect(surface, trunk_color, [x - 2, y - width//4, 4, width//2])
         
         # Leaves (simple triangle shape)
         leaf_points = [
-            (x, y - size//2),  # Top
-            (x - size//2, y + size//4),  # Bottom left
-            (x + size//2, y + size//4)   # Bottom right
+            (x, y - width//2),  # Top
+            (x - width//2, y + width//4),  # Bottom left
+            (x + width//2, y + width//4)   # Bottom right
         ]
         pygame.draw.polygon(surface, leaf_color, leaf_points)
 
@@ -1140,22 +1126,19 @@ class Park(Obstacle):
 class Lake(Obstacle):
     def __init__(self, x, y, variations, block_size=20):
         super().__init__(x, y, variations, block_size)
-        # --------------------------------------------------
-        # Make lakes discharge instead of being destroyed
         self.can_be_destroyed = False
-        # --------------------------------------------------
+        # Use full dimensions directly
+        self.width = variations['width']
+        self.height = variations['height']
 
     def draw_normal(self, surface):
         if self.is_discharging:
             self.draw_discharge_effect(surface)
         else:
-            width = self.variations['width'] * 16
-            height = self.variations['height'] * 12
-            
-            # Draw base grass border
+            # Draw base grass border to fill entire tile
             grass_colors = [(34, 139, 34), (0, 100, 0)]
             pygame.draw.rect(surface, grass_colors[0],
-                            [self.x, self.y, width, height])
+                           [self.x, self.y, self.width, self.height])
             
             # Animated water with multiple layers
             water_colors = [
@@ -1163,45 +1146,33 @@ class Lake(Obstacle):
                 (30, 144, 255),   # Dodger blue
                 (135, 206, 235),  # Sky blue
             ]
-            margin = 8
+            margin = 10  # Fixed smaller margin instead of relative to width
             
             # Draw water layers with animated edges
             for i, color in enumerate(reversed(water_colors)):
-                shrink = i * 4
+                shrink = i * 4  # Fixed shrink amount
                 water_rect = [
                     self.x + margin + shrink,
                     self.y + margin + shrink,
-                    width - (margin + shrink) * 2,
-                    height - (margin + shrink) * 2
+                    self.width - (margin + shrink) * 2,
+                    self.height - (margin + shrink) * 2
                 ]
                 
                 # Draw water with pixelated edges
-                for px in range(int(water_rect[0]), int(water_rect[0] + water_rect[2]), 4):
-                    for py in range(int(water_rect[1]), int(water_rect[1] + water_rect[3]), 4):
+                pixel_size = 4
+                for px in range(int(water_rect[0]), int(water_rect[0] + water_rect[2]), pixel_size):
+                    for py in range(int(water_rect[1]), int(water_rect[1] + water_rect[3]), pixel_size):
                         if (px == water_rect[0] or 
-                            px >= water_rect[0] + water_rect[2] - 4 or
+                            px >= water_rect[0] + water_rect[2] - pixel_size or
                             py == water_rect[1] or 
-                            py >= water_rect[1] + water_rect[3] - 4):
+                            py >= water_rect[1] + water_rect[3] - pixel_size):
                             if random.random() > 0.7:  # Animated edges
                                 continue
-                        pygame.draw.rect(surface, color, [px, py, 4, 4]) 
-        # --------------------------------------------------
+                        pygame.draw.rect(surface, color, [px, py, pixel_size, pixel_size])
 
     def get_hitbox(self):
-        width = self.variations['width'] * 16
-        height = self.variations['height'] * 12
-        
-        # Create hitbox
-        hitbox = pygame.Rect(self.x, self.y, width, height)
-        
-        # Get the play area bottom from the game instance
-        if hasattr(self, 'game') and self.game and hasattr(self.game, 'current_level'):
-            play_bottom = self.game.current_level.play_area['bottom']
-            # If this is a bottom row lake, extend hitbox to play area bottom
-            if abs(self.y + height - play_bottom) < 50:  # If we're close to the bottom
-                hitbox.height = play_bottom - self.y
-        
-        return hitbox 
+        # Return full-size hitbox
+        return pygame.Rect(self.x, self.y, self.width, self.height)
 
     def get_no_spawn_rects(self):
         """

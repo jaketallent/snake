@@ -206,16 +206,16 @@ class BaseLevel:
             elif obstacle_type == 'park':
                 for x, y, width, height in self.park_positions:
                     variations = {
-                        'width': width // 16,
-                        'height': height // 12
+                        'width': width,
+                        'height': height
                     }
                     new_obstacle = Park(x, y, variations)
                     self.obstacles.append(new_obstacle)
             elif obstacle_type == 'lake':
                 for x, y, width, height in self.lake_positions:
                     variations = {
-                        'width': width // 16,
-                        'height': height // 12
+                        'width': width,
+                        'height': height
                     }
                     new_obstacle = Lake(x, y, variations)
                     self.obstacles.append(new_obstacle)

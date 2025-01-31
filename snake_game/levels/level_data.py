@@ -266,14 +266,10 @@ LEVELS = [
             {
                 'type': 'park',
                 'count': 999,
-                'min_size': 2,
-                'max_size': 4
             },
             {
                 'type': 'lake',
                 'count': 999,
-                'min_size': 2,
-                'max_size': 4
             }
         ],
         'critters': CITY_CRITTERS,
@@ -321,14 +317,10 @@ LEVELS = [
             {
                 'type': 'park',
                 'count': 999,
-                'min_size': 2,
-                'max_size': 4
             },
             {
                 'type': 'lake',
                 'count': 999,
-                'min_size': 2,
-                'max_size': 4
             }
         ],
         'critters': CITY_CRITTERS,
