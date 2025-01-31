@@ -3,8 +3,9 @@ import math
 import random
 
 class Snake:
-    def __init__(self, x, y, block_size=20):
+    def __init__(self, x, y, game=None, block_size=20):
         self.block_size = block_size
+        self.game = game  # Store reference to game
         self.reset(x, y)
         self.is_dead = False
         self.death_timer = 0
@@ -484,6 +485,10 @@ class Snake:
 
     def spit_venom(self):
         """Spit a venom projectile at the cost of one segment"""
+        # Only allow spitting in boss levels
+        if not hasattr(self, 'game') or not self.game.current_level.level_data.get('is_boss', False):
+            return
+        
         if len(self.body) > 1 and self.can_spit:
             # Calculate direction based on current movement
             if self.dx == 0 and self.dy == 0:

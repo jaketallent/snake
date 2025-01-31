@@ -26,7 +26,7 @@ class Game:
         self.snake_speed = 14
         self.current_level_idx = 0
         self.current_level = None
-        self.snake = Snake(self.width // 2, self.height // 2)
+        self.snake = Snake(self.width // 2, self.height // 2, self)
         self.music_manager = MusicManager()  # Initialize music manager
         
         # Initialize font
