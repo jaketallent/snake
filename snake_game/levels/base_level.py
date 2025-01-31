@@ -315,33 +315,81 @@ class BaseLevel:
                 attempts += 1
     
     def spawn_food(self):
-        max_attempts = 100
-        for attempt in range(max_attempts):
-            # Always align to block_size grid first
-            x = round(random.randrange(0, self.game.width - self.block_size) / self.block_size) * self.block_size
-            y = round(random.randrange(self.play_area['top'], self.play_area['bottom'] - self.block_size) / self.block_size) * self.block_size
-
-            # 1) Check standard collisions & BFS reachability
-            if not self.is_safe_position(x, y):
-                continue
-
-            # Fix: Only do BFS reachability check if not Desert
-            if self.level_data['biome'] != 'desert':
+        if self.level_data['biome'] == 'city':
+            # Use the same road grid system we use for snake spawning
+            block_size = 160
+            road_width = 60
+            
+            # Calculate vertical road positions (same as snake spawn)
+            vertical_road_top = self.play_area['top'] + road_width // 2
+            safe_y_positions = []
+            
+            # Add horizontal road positions
+            available_height = self.play_area['bottom'] - vertical_road_top
+            rows = (available_height + block_size - 1) // block_size
+            
+            for row in range(rows + 1):  # +1 to include all roads
+                y = vertical_road_top + (row * block_size)
+                safe_y_positions.append(y)
+            
+            # Try random road positions first
+            max_attempts = 100
+            for attempt in range(max_attempts):
+                # 70% chance: pick a horizontal road
+                y = random.choice(safe_y_positions)
+                x = random.randrange(road_width, self.game.width - road_width)
+                
+                # Round to block_size grid
+                x = round(x / self.block_size) * self.block_size
+                y = round(y / self.block_size) * self.block_size
+                
+                # Basic collision checks
+                if not self.is_safe_position(x, y):
+                    continue
+                    
                 if not self.is_reachable_by_snake(x, y):
                     continue
-
-            # 2) If we're in the city, also skip if this position sits on a building top
-            if self.level_data['biome'] == 'city' and self._overlaps_building_top(x, y):
-                continue
-
-            # If all checks passed, spawn the food
-            self.food = Food(x, y, random.choice(self.level_data['critters']))
+                    
+                if self._overlaps_building_top(x, y):
+                    continue
+                
+                # Found valid position
+                self.food = Food(x, y, random.choice(self.level_data['critters']))
+                return
+                
+            # If we get here, use guaranteed safe position on first horizontal road
+            print("Using guaranteed safe food position on first road")
+            fallback_x = self.game.width // 2
+            fallback_y = safe_y_positions[0]
+            
+            # Align to block size
+            fallback_x = round(fallback_x / self.block_size) * self.block_size
+            fallback_y = round(fallback_y / self.block_size) * self.block_size
+            
+            self.food = Food(fallback_x, fallback_y, random.choice(self.level_data['critters']))
             return
+        
+        else:
+            # Original spawn logic for other biomes
+            max_attempts = 100
+            for attempt in range(max_attempts):
+                x = round(random.randrange(0, self.game.width - self.block_size) / self.block_size) * self.block_size
+                y = round(random.randrange(self.play_area['top'], self.play_area['bottom'] - self.block_size) / self.block_size) * self.block_size
 
-        # If we exhausted attempts, fallback to center (also grid-aligned)
-        fallback_x = (self.game.width // 2) // self.block_size * self.block_size
-        fallback_y = ((self.play_area['top'] + self.play_area['bottom']) // 2) // self.block_size * self.block_size
-        self.food = Food(fallback_x, fallback_y, random.choice(self.level_data['critters']))
+                if not self.is_safe_position(x, y):
+                    continue
+
+                if self.level_data['biome'] != 'desert':
+                    if not self.is_reachable_by_snake(x, y):
+                        continue
+
+                self.food = Food(x, y, random.choice(self.level_data['critters']))
+                return
+            
+            # Fallback for non-city biomes
+            fallback_x = (self.game.width // 2) // self.block_size * self.block_size
+            fallback_y = ((self.play_area['top'] + self.play_area['bottom']) // 2) // self.block_size * self.block_size
+            self.food = Food(fallback_x, fallback_y, random.choice(self.level_data['critters']))
 
     def _overlaps_building_top(self, x, y):
         """
@@ -950,4 +998,17 @@ class BaseLevel:
         if trigger_id in self.cutscenes:
             cutscene_id = self.cutscenes[trigger_id]
             self.game.music_manager.stop_music()
-            self.current_cutscene = BaseCutscene(self.game, cutscene_id) 
+            self.current_cutscene = BaseCutscene(self.game, cutscene_id)
+
+    def _collides_with_no_spawn(self, x, y):
+        """
+        Checks if a position collides with any obstacle's no spawn rectangles.
+        """
+        food_rect = pygame.Rect(x, y, self.block_size, self.block_size)
+        for obstacle in self.obstacles:
+            if hasattr(obstacle, 'get_no_spawn_rects'):
+                no_spawn_rects = obstacle.get_no_spawn_rects()
+                for rect in no_spawn_rects:
+                    if food_rect.colliderect(rect):
+                        return True
+        return False 

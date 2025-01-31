@@ -985,7 +985,12 @@ class Building(Obstacle):
             rects.append(base_rect)
 
         top_rect = self.get_top_bounding_rect()
-        rects.append(top_rect)
+        if top_rect is not None:
+            # For example, shrink it vertically by 10px and shift up by 10px
+            shifted_top_rect = top_rect.copy()
+            shifted_top_rect.height = max(shifted_top_rect.height - 10, 0)
+            shifted_top_rect.y -= 10
+            rects.append(shifted_top_rect)
 
         return rects
 
