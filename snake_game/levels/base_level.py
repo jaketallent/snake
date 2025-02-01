@@ -816,10 +816,17 @@ class BaseLevel:
                              [x - road_width // 2, vertical_road_top,
                               road_width, self.play_area['bottom'] - vertical_road_top])
             
-            # Dashed white lines
+            # Dashed white lines - stop before each intersection
             center_x = x - 2
-            for y in range(vertical_road_top, self.play_area['bottom'], 30):
-                pygame.draw.rect(surface, road_line_color, [center_x, y, 4, 20])
+            for y in range(vertical_road_top, self.play_area['bottom'], block_size):
+                # Draw dashes only between intersections
+                dash_start = y + road_width // 2 + 10  # Start after intersection
+                dash_end = y + block_size - road_width // 2 - 10  # Stop before next intersection
+                
+                current_y = dash_start
+                while current_y < dash_end:
+                    pygame.draw.rect(surface, road_line_color, [center_x, current_y, 4, 20])
+                    current_y += 30
 
         # Draw horizontal roads (clamp the top side to avoid overlapping sky)
         for y in range(vertical_road_top, self.play_area['bottom'] + block_size, block_size):
@@ -830,9 +837,17 @@ class BaseLevel:
             pygame.draw.rect(surface, road_colors[1],
                              [0, actual_y, self.game.width, road_width])
 
-            # Dashed white lines
-            for x in range(0, self.game.width, 30):
-                pygame.draw.rect(surface, road_line_color, [x, actual_y + road_width//2 - 2, 20, 4])
+            # Dashed white lines - stop before each intersection
+            center_y = actual_y + road_width//2 - 2
+            for x in range(0, self.game.width, block_size):
+                # Draw dashes only between intersections
+                dash_start = x + road_width // 2 + 10  # Start after intersection
+                dash_end = x + block_size - road_width // 2 - 10  # Stop before next intersection
+                
+                current_x = dash_start
+                while current_x < dash_end:
+                    pygame.draw.rect(surface, road_line_color, [current_x, center_y, 20, 4])
+                    current_x += 30
     
     def update(self):
         # Update cutscene if active
