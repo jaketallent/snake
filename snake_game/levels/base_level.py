@@ -809,16 +809,19 @@ class BaseLevel:
                          [0, self.play_area['top'],
                           self.game.width, self.play_area['bottom'] - self.play_area['top']])
 
-        # First draw all road surfaces
+        # Draw vertical roads first (shift them so none extends above the sky)
         vertical_road_top = self.play_area['top'] + road_width // 2
-        
-        # Draw vertical roads first
         for x in range(0, self.game.width + block_size, block_size):
             pygame.draw.rect(surface, road_colors[1],
                              [x - road_width // 2, vertical_road_top,
                               road_width, self.play_area['bottom'] - vertical_road_top])
+            
+            # Dashed white lines
+            center_x = x - 2
+            for y in range(vertical_road_top, self.play_area['bottom'], 30):
+                pygame.draw.rect(surface, road_line_color, [center_x, y, 4, 20])
 
-        # Draw horizontal roads
+        # Draw horizontal roads (clamp the top side to avoid overlapping sky)
         for y in range(vertical_road_top, self.play_area['bottom'] + block_size, block_size):
             actual_y = y - road_width // 2
             if actual_y < self.play_area['top']:
@@ -827,99 +830,9 @@ class BaseLevel:
             pygame.draw.rect(surface, road_colors[1],
                              [0, actual_y, self.game.width, road_width])
 
-        # Now draw road markings
-        dash_length = 12          # Shorter dashes
-        line_margin = 15          # Space to leave near intersections
-        num_dashes = 3           # We want exactly 3 dashes per road segment
-        
-        # Calculate spacing to fit exactly 3 dashes between crosswalks
-        usable_space = block_size - road_width - (2 * line_margin)
-        total_dash_space = num_dashes * dash_length
-        remaining_space = usable_space - total_dash_space
-        line_spacing = remaining_space / (num_dashes - 1)  # Space between dashes
-
-        # Draw dashed center lines for vertical roads
-        for x in range(0, self.game.width + block_size, block_size):
-            center_x = x - 2
-            for y in range(vertical_road_top, self.play_area['bottom'], block_size):
-                # Start after intersection with margin
-                start_y = y + road_width // 2 + line_margin
-                
-                # Draw exactly 3 dashes
-                for i in range(num_dashes):
-                    dash_y = start_y + (i * (dash_length + line_spacing))
-                    pygame.draw.rect(surface, road_line_color, 
-                                   [center_x, dash_y, 4, dash_length])
-
-        # Draw dashed center lines for horizontal roads
-        for y in range(vertical_road_top, self.play_area['bottom'] + block_size, block_size):
-            actual_y = y - road_width // 2
-            if actual_y < self.play_area['top']:
-                continue
-            
-            center_y = actual_y + road_width // 2 - 2
-            for x in range(0, self.game.width, block_size):
-                # Start after intersection with margin
-                start_x = x + road_width // 2 + line_margin
-                
-                # Draw exactly 3 dashes
-                for i in range(num_dashes):
-                    dash_x = start_x + (i * (dash_length + line_spacing))
-                    pygame.draw.rect(surface, road_line_color, 
-                                   [dash_x, center_y, dash_length, 4])
-
-        # Draw crosswalks
-        crosswalk_stripe_width = 4      # Width of each stripe
-        crosswalk_length = 16           # Slightly shorter length
-        stripe_spacing = 4              # Space between stripes
-        crosswalk_margin = 12           # Slightly larger margin from intersection
-        crosswalk_road_margin = 6       # Space between crosswalk and road edge
-
-        # Draw crosswalks at intersections
-        for x in range(0, self.game.width + block_size, block_size):
-            # First handle the top road separately
-            y = vertical_road_top
-            # Draw vertical stripes (for horizontal roads) - only below first road
-            for stripe_x in range(x - road_width//2, x + road_width//2, stripe_spacing + crosswalk_stripe_width):
-                # Only after intersection for first road (no crosswalks above the first road)
-                pygame.draw.rect(surface, road_line_color,
-                               [stripe_x, y + road_width//2 - crosswalk_length + crosswalk_margin + crosswalk_road_margin,
-                                crosswalk_stripe_width, crosswalk_length - crosswalk_road_margin])
-
-            # Draw horizontal stripes (for vertical roads) - both sides of intersection
-            for stripe_y in range(y - road_width//2, y + road_width//2, stripe_spacing + crosswalk_stripe_width):
-                # Before intersection
-                pygame.draw.rect(surface, road_line_color,
-                               [x - road_width//2 - crosswalk_margin, stripe_y,
-                                crosswalk_length - crosswalk_road_margin, crosswalk_stripe_width])
-                # After intersection
-                pygame.draw.rect(surface, road_line_color,
-                               [x + road_width//2 - crosswalk_length + crosswalk_margin + crosswalk_road_margin, stripe_y,
-                                crosswalk_length - crosswalk_road_margin, crosswalk_stripe_width])
-
-            # Now handle all other roads (draw crosswalks on both sides)
-            for y in range(vertical_road_top + block_size, self.play_area['bottom'], block_size):
-                # Draw vertical stripes (for horizontal roads)
-                for stripe_x in range(x - road_width//2, x + road_width//2, stripe_spacing + crosswalk_stripe_width):
-                    # Before intersection
-                    pygame.draw.rect(surface, road_line_color,
-                                   [stripe_x, y - road_width//2 - crosswalk_margin,
-                                    crosswalk_stripe_width, crosswalk_length - crosswalk_road_margin])
-                    # After intersection
-                    pygame.draw.rect(surface, road_line_color,
-                                   [stripe_x, y + road_width//2 - crosswalk_length + crosswalk_margin + crosswalk_road_margin,
-                                    crosswalk_stripe_width, crosswalk_length - crosswalk_road_margin])
-
-                # Draw horizontal stripes (for vertical roads)
-                for stripe_y in range(y - road_width//2, y + road_width//2, stripe_spacing + crosswalk_stripe_width):
-                    # Before intersection
-                    pygame.draw.rect(surface, road_line_color,
-                                   [x - road_width//2 - crosswalk_margin, stripe_y,
-                                    crosswalk_length - crosswalk_road_margin, crosswalk_stripe_width])
-                    # After intersection
-                    pygame.draw.rect(surface, road_line_color,
-                                   [x + road_width//2 - crosswalk_length + crosswalk_margin + crosswalk_road_margin, stripe_y,
-                                    crosswalk_length - crosswalk_road_margin, crosswalk_stripe_width])
+            # Dashed white lines
+            for x in range(0, self.game.width, 30):
+                pygame.draw.rect(surface, road_line_color, [x, actual_y + road_width//2 - 2, 20, 4])
     
     def update(self):
         # Update cutscene if active
