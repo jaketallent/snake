@@ -721,7 +721,14 @@ class BaseLevel:
     
     def is_complete(self):
         if self.level_data.get('is_boss', False):
-            return self.boss_health <= 0  # Level complete when boss is defeated
+            # Only consider complete if boss health is 0 AND death animation is finished
+            if self.boss_health <= 0:
+                # If boss exists and is dying, wait for animation
+                if self.boss and hasattr(self.boss, 'is_dying') and self.boss.is_dying:
+                    return False
+                # Otherwise (boss is None or not dying), level is complete
+                return True
+            return False
         elif self.level_data['biome'] == 'city':
             return self.buildings_destroyed >= self.required_buildings
         else:
@@ -769,7 +776,10 @@ class BaseLevel:
         
         # Draw boss if present
         if self.boss:
-            self.boss.draw(surface)
+            if hasattr(self.boss, 'is_dying') and self.boss.is_dying:
+                self.boss.draw_death_animation(surface)
+            else:
+                self.boss.draw(surface)
     
     def draw_background(self, surface):
         # Draw sky using sky manager
@@ -861,26 +871,16 @@ class BaseLevel:
         
         # Update boss if present
         if self.boss:
-            self.boss.update()
-            
-            # Check if powered-up snake hits boss
-            if self.game.snake.is_powered_up:
-                snake_rect = pygame.Rect(
-                    self.game.snake.x, 
-                    self.game.snake.y,
-                    self.game.snake.block_size,
-                    self.game.snake.block_size
-                )
-                boss_rect = pygame.Rect(
-                    self.boss.x,
-                    self.boss.y,
-                    self.boss.width,
-                    self.boss.height
-                )
-                if snake_rect.colliderect(boss_rect):
-                    damage = self.boss.take_damage()
-                    self.boss_health = max(0, self.boss_health - damage)
-                    self.game.snake.destroy_obstacle()  # Consume power-up
+            if hasattr(self.boss, 'is_dying') and self.boss.is_dying:
+                self.boss.death_timer += 1
+                if self.boss.death_timer >= self.boss.death_duration:
+                    self.boss = None  # Remove boss after death animation
+            else:
+                self.boss.update()
+                
+                # Check if boss health reaches 0
+                if self.boss_health <= 0 and not hasattr(self.boss, 'is_dying'):
+                    self.boss.start_death_animation()
 
         # Update all obstacles
         for obs in self.obstacles[:]:  # iterate over a copy, so we can remove

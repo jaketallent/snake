@@ -67,6 +67,13 @@ class TankBoss:
         self.min_distance = 100  # Reduced from 150
         self.max_distance = 250  # Reduced from 300
         self.optimal_distance = 175  # Added for more aggressive positioning
+        
+        # Death animation
+        self.is_dying = False
+        self.death_timer = 0
+        self.death_duration = 180  # 3 seconds
+        self.explosion_chunks = []
+        self.final_explosion_started = False
 
     def update(self):
         self._update_ai()
@@ -448,4 +455,91 @@ class TankBoss:
             pygame.draw.circle(surface, colors['glow'],
                              (int(proj['x']), int(proj['y'])), 6)
             pygame.draw.circle(surface, colors['window'],
-                             (int(proj['x']), int(proj['y'])), 4) 
+                             (int(proj['x']), int(proj['y'])), 4)
+
+    def start_death_animation(self):
+        """Initiate the death sequence"""
+        self.is_dying = True
+        self.death_timer = 0
+        
+        # Create explosion chunks from tank parts
+        chunk_size = 8
+        # Body chunks
+        for y in range(0, self.height, chunk_size):
+            for x in range(0, self.width, chunk_size):
+                self.explosion_chunks.append({
+                    'x': self.x + x,
+                    'y': self.y + y,
+                    'dx': random.uniform(-5, 5),
+                    'dy': random.uniform(-8, -2),
+                    'rotation': random.uniform(0, 360),
+                    'rot_speed': random.uniform(-5, 5),
+                    'size': chunk_size,
+                    'color': random.choice([
+                        self.colors['body'],
+                        self.colors['turret'],
+                        self.colors['tracks'],
+                    ])
+                })
+
+    def draw_death_animation(self, surface):
+        """Draw the boss death animation"""
+        if not self.is_dying:
+            return
+            
+        progress = self.death_timer / self.death_duration
+        time = pygame.time.get_ticks()
+        
+        # During initial explosions (0-30% progress), draw the boss with explosions overlaid
+        if progress < 0.3:
+            # Draw the normal boss sprite first
+            self.draw(surface)
+            
+            # Then draw explosion effects on top
+            for _ in range(3):
+                x = self.x + random.randint(0, self.width)
+                y = self.y + random.randint(0, self.height)
+                self._draw_explosion(surface, x, y, random.randint(20, 40))
+        
+        # Main explosion sequence with fading chunks (30-100% progress)
+        else:
+            # Calculate fade out alpha for chunks
+            chunk_alpha = max(0, int(255 * (1 - (progress - 0.3) * 1.4)))  # Fade out by 70% progress
+            
+            # Draw chunks flying apart
+            for chunk in self.explosion_chunks:
+                # Update chunk position
+                chunk['x'] += chunk['dx']
+                chunk['y'] += chunk['dy'] + (progress * 2)  # Add gravity
+                chunk['rotation'] += chunk['rot_speed']
+                
+                # Draw chunk with fade
+                chunk_surface = pygame.Surface((chunk['size'], chunk['size']), pygame.SRCALPHA)
+                color = (*chunk['color'], chunk_alpha)  # Add alpha to color
+                chunk_surface.fill(color)
+                rotated = pygame.transform.rotate(chunk_surface, chunk['rotation'])
+                surface.blit(rotated, (chunk['x'], chunk['y']))
+                
+                # Add trailing fire effect (also fading)
+                if random.random() < 0.7:
+                    self._draw_fire_trail(surface, chunk['x'], chunk['y'], 
+                                        alpha=chunk_alpha)
+
+    def _draw_explosion(self, surface, x, y, size):
+        """Draw a single explosion effect"""
+        colors = [(255, 200, 50), (255, 150, 50), (255, 100, 50)]
+        for i in range(3):
+            radius = size * (3 - i) / 3
+            pygame.draw.circle(surface, colors[i], (int(x), int(y)), int(radius))
+
+    def _draw_fire_trail(self, surface, x, y, alpha=255):
+        """Draw fire trail behind chunks"""
+        colors = [(255, 200, 50), (255, 150, 50), (255, 100, 50)]
+        for i in range(3):
+            offset = random.uniform(-5, 5)
+            trail_surface = pygame.Surface((8, 8), pygame.SRCALPHA)
+            color_with_alpha = (*colors[i], int(alpha * 0.7))  # Slightly more transparent than chunks
+            pygame.draw.circle(trail_surface, color_with_alpha,
+                             (4, 4), 4 - i)
+            surface.blit(trail_surface, 
+                        (int(x + offset - 4), int(y + offset - 4))) 

@@ -165,10 +165,16 @@ class Game:
                             game_over = False
                             return "menu"
                     
-                    # Developer feature: SHIFT+P toggles power-up
-                    if DEV_MODE and (event.mod & pygame.KMOD_SHIFT) and event.key == pygame.K_p:
-                        self.snake.is_powered_up = not self.snake.is_powered_up
-                        self.snake.power_up_timer = 0  # Reset its timer
+                    # Developer features
+                    if DEV_MODE and (event.mod & pygame.KMOD_SHIFT):
+                        if event.key == pygame.K_p:  # Existing power-up toggle
+                            self.snake.is_powered_up = not self.snake.is_powered_up
+                            self.snake.power_up_timer = 0  # Reset its timer
+                        elif event.key == pygame.K_k:  # New boss kill shortcut
+                            if (self.current_level.boss and 
+                                not self.current_level.boss.is_dying):
+                                self.current_level.boss_health = 0
+                                self.current_level.boss.start_death_animation()
                     
                     # Handle other input based on game state
                     if self.current_level.current_cutscene:
@@ -383,7 +389,9 @@ class Game:
             self.window.blit(streak_surface, streak_rect)
 
     def draw_boss_health(self):
-        if self.current_level.level_data.get('is_boss', False) and hasattr(self.current_level, 'boss'):
+        if (self.current_level.level_data.get('is_boss', False) and 
+            hasattr(self.current_level, 'boss') and 
+            self.current_level.boss is not None):  # Add this check
             boss = self.current_level.boss
             
             # Draw health bar above boss
