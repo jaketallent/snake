@@ -53,7 +53,21 @@ class Snake:
         self.is_flashing = False
         self.power_up_timer = 0
         
+    def is_movement_frozen(self):
+        """Check if snake movement should be frozen (e.g. during boss death)"""
+        # Check if we're in a boss level and boss is dying
+        if (self.game.current_level.level_data.get('is_boss', False) and 
+            self.game.current_level.boss and 
+            hasattr(self.game.current_level.boss, 'is_dying') and 
+            self.game.current_level.boss.is_dying):
+            return True
+        return False
+
     def handle_input(self, event):
+        # Don't handle input if movement is frozen
+        if self.is_movement_frozen():
+            return
+            
         if event.type == pygame.KEYDOWN:
             # Only prevent complete reversal of direction
             if event.key == pygame.K_LEFT and self.dx != self.block_size:
@@ -86,6 +100,10 @@ class Snake:
                 self.spit_venom()
     
     def update(self):
+        # If movement is frozen, return current position without updating
+        if self.is_movement_frozen():
+            return self.x, self.y
+            
         # Clear old inputs from buffer
         current_time = pygame.time.get_ticks()
         frame_duration = 1000 / 60  # Approximate milliseconds per frame

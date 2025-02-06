@@ -68,7 +68,7 @@ class TankBoss:
         self.max_distance = 250  # Reduced from 300
         self.optimal_distance = 175  # Added for more aggressive positioning
         
-        # Death animation
+        # Death animation attributes - Add these
         self.is_dying = False
         self.death_timer = 0
         self.death_duration = 180  # 3 seconds
@@ -242,9 +242,19 @@ class TankBoss:
             })
 
     def take_damage(self):
+        """Handle boss taking damage"""
         self.damage_flash = True
         self.flash_timer = 0
-        return 10  # Return damage amount
+        
+        # Check current health before applying damage
+        current_health = self.game.current_level.boss_health
+        damage = 10
+        
+        # If this damage will reduce health to 0, start death animation
+        if current_health - damage <= 0:
+            self.start_death_animation()
+            
+        return damage
 
     def draw(self, surface):
         # Create an even larger surface to accommodate rotation
@@ -459,10 +469,13 @@ class TankBoss:
 
     def start_death_animation(self):
         """Initiate the death sequence"""
+        if not hasattr(self, 'is_dying'):  # Ensure attribute exists
+            self.is_dying = False
         self.is_dying = True
         self.death_timer = 0
         
         # Create explosion chunks from tank parts
+        self.explosion_chunks = []  # Reset chunks list
         chunk_size = 8
         # Body chunks
         for y in range(0, self.height, chunk_size):

@@ -513,6 +513,19 @@ class BaseLevel:
         return False
     
     def check_collision(self, snake):
+        # Skip collision checks if boss is dying
+        if (self.level_data.get('is_boss', False) and 
+            self.boss and hasattr(self.boss, 'is_dying') and 
+            self.boss.is_dying):
+            return False
+
+        # Check collision with walls
+        if snake.x < 0 or snake.x >= self.game.width - snake.block_size:
+            return True
+        if snake.y < self.play_area['top'] or snake.y >= self.play_area['bottom'] - snake.block_size:
+            return True
+        
+        # Rest of collision checks...
         new_x, new_y = snake.update()
         
         # Check projectile collisions BEFORE clamping position
