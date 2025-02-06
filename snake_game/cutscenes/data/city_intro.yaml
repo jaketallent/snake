@@ -21,7 +21,10 @@ sequence:
       - ["snake_god_appear", true]
 
   - type: dialogue
-    text: "Alas, your foe was not hiding in the forest."
+    text: "You have grown huge, my child - monstrous from eating the beasts of the wood."
+
+  - type: dialogue
+    text: "But alas, your foe was not hiding in the forest."
 
   - type: dialogue
     text: "He may have taken refuge in the mountains." 

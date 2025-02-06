@@ -266,14 +266,10 @@ LEVELS = [
             {
                 'type': 'park',
                 'count': 999,
-                'min_size': 2,
-                'max_size': 4
             },
             {
                 'type': 'lake',
                 'count': 999,
-                'min_size': 2,
-                'max_size': 4
             }
         ],
         'critters': CITY_CRITTERS,
@@ -281,6 +277,56 @@ LEVELS = [
         'play_area': {'top': 135, 'bottom': 600},
         'cutscenes': {
             'intro': 'city_intro'
+        }
+    },
+    {
+        'name': 'City Boss',
+        'biome': 'city',
+        'is_boss': True,
+        'background_colors': {
+            'ground': [
+                (50, 50, 50),    # Dark road
+                (60, 60, 60),    # Medium road
+                (40, 40, 40),    # Darker road
+                (70, 70, 70)     # Light road
+            ],
+            'road_lines': (255, 255, 255),  # White road lines
+            'building_styles': {
+                'concrete': {
+                    'base': (100, 100, 100),
+                    'top': (80, 80, 80),
+                    'windows': (200, 200, 100),
+                    'entrance': (60, 60, 60),
+                    'trim': (90, 90, 90)
+                }
+            },
+            'park_colors': [
+                (34, 139, 34),   # Forest green
+                (0, 100, 0),     # Dark green
+                (85, 107, 47)    # Dark olive green
+            ]
+        },
+        'obstacles': [
+            {
+                'type': 'rubble',  # Instead of 'building'
+                'count': 999,  # We'll still use the city grid system
+                'min_size': 4,
+                'max_size': 8,
+                'grid_positions': 'building'  # NEW: tell it to use building grid positions
+            },
+            {
+                'type': 'park',
+                'count': 999,
+            },
+            {
+                'type': 'lake',
+                'count': 999,
+            }
+        ],
+        'critters': CITY_CRITTERS,
+        'play_area': {'top': 135, 'bottom': 600},
+        'cutscenes': {
+            'intro': 'city_boss_intro'
         }
     }
 ] 
