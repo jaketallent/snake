@@ -878,6 +878,25 @@ class BaseLevel:
             else:
                 self.boss.update()
                 
+                # Check if powered-up snake hits boss
+                if self.game.snake.is_powered_up:
+                    snake_rect = pygame.Rect(
+                        self.game.snake.x, 
+                        self.game.snake.y,
+                        self.game.snake.block_size,
+                        self.game.snake.block_size
+                    )
+                    boss_rect = pygame.Rect(
+                        self.boss.x,
+                        self.boss.y,
+                        self.boss.width,
+                        self.boss.height
+                    )
+                    if snake_rect.colliderect(boss_rect):
+                        damage = self.boss.take_damage()
+                        self.boss_health = max(0, self.boss_health - damage)
+                        self.game.snake.destroy_obstacle()  # Consume power-up
+                
                 # Check if boss health reaches 0
                 if self.boss_health <= 0 and not hasattr(self.boss, 'is_dying'):
                     self.boss.start_death_animation()

@@ -21,13 +21,22 @@ sequence:
       - ["snake_god_appear", true]
 
   - type: dialogue
-    text: "You have laid waste to their city, my child."
+    text: "You have laid waste to the city, my child."
 
   - type: dialogue
     text: "But something stirs in the ruins..."
 
   - type: dialogue
-    text: "A great machine approaches - one of their mechanical beasts."
+    text: "A great machine approaches - a mechanical beast devised to destroy you."
 
   - type: dialogue
-    text: "Destroy it, and claim dominion over this concrete jungle." 
+    text: "I shall grant you a new power." 
+
+  - type: dialogue
+    text: "Your venom now crackles with energy. When you have fed at least once, press Space to unleash it upon your foe."
+
+  - type: dialogue
+    text: "But take care: It will cost you a segment of your body."
+
+  - type: dialogue
+    text: "Now, go! Show them what you've become."

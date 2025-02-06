@@ -21,7 +21,7 @@ sequence:
       - ["snake_god_appear", true]
 
   - type: dialogue
-    text: "You have grown huge, my child - fat and monstrous from eating the beasts of the wood."
+    text: "You have grown huge, my child - monstrous from eating the beasts of the wood."
 
   - type: dialogue
     text: "But alas, your foe was not hiding in the forest."

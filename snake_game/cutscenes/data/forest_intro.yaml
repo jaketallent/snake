@@ -21,7 +21,7 @@ sequence:
       - ["snake_god_appear", true]
 
   - type: dialogue
-    text: "You have grown fat and strong." 
+    text: "You have become fat and strong." 
 
   - type: dialogue
     text: "It may not appear so, but this is a trick of perspective." 
