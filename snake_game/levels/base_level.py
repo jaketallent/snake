@@ -519,13 +519,18 @@ class BaseLevel:
             self.boss.is_dying):
             return False
 
-        # Check collision with walls
-        if snake.x < 0 or snake.x >= self.game.width - snake.block_size:
-            return True
-        if snake.y < self.play_area['top'] or snake.y >= self.play_area['bottom'] - snake.block_size:
-            return True
+        # Clamp snake position at edges instead of collision
+        if snake.x < 0:
+            snake.x = 0
+        elif snake.x >= self.game.width - snake.block_size:
+            snake.x = self.game.width - snake.block_size
         
-        # Rest of collision checks...
+        if snake.y < self.play_area['top']:
+            snake.y = self.play_area['top']
+        elif snake.y >= self.play_area['bottom'] - snake.block_size:
+            snake.y = self.play_area['bottom'] - snake.block_size
+
+        # Continue with other collision checks...
         new_x, new_y = snake.update()
         
         # Check projectile collisions BEFORE clamping position
