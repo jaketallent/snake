@@ -512,8 +512,8 @@ class Snake:
             if self.dx == 0 and self.dy == 0:
                 return  # Don't spit if not moving
             
-            # Remove a segment
-            self.body.pop()
+            # Remove the first segment (tail) since body list goes from tail to head
+            self.body.pop(0)  # Remove the tail segment
             self.length -= 1
             
             # Create projectile with normalized direction and faster speed
