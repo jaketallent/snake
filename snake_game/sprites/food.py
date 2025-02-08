@@ -1,5 +1,6 @@
 import pygame
 import random
+import math
 
 class Food:
     def __init__(self, x, y, critter_data, block_size=20):
@@ -12,7 +13,15 @@ class Food:
         block = self.block_size // 4
         
         # Call the appropriate drawing method based on critter type
-        if self.critter_data['type'] == 'mouse':
+        if self.critter_data['type'] == 'boulder':
+            self._draw_boulder(surface, block)
+        elif self.critter_data['type'] == 'pine':
+            self._draw_pine(surface, block)
+        elif self.critter_data['type'] == 'rocks':
+            self._draw_rocks(surface, block)
+        elif self.critter_data['type'] == 'dead_tree':
+            self._draw_dead_tree(surface, block)
+        elif self.critter_data['type'] == 'mouse':
             self._draw_mouse(surface, block)
         elif self.critter_data['type'] == 'lizard':
             self._draw_lizard(surface, block)
@@ -37,6 +46,65 @@ class Food:
         elif self.critter_data['type'] == 'van':
             self._draw_van(surface, block)
     
+    def _draw_boulder(self, surface, block):
+        """Draw a simple boulder (grey square with lighter highlight)"""
+        # Dark grey base
+        pygame.draw.rect(surface, (80, 80, 80),  # Darker grey for contrast
+                        [self.x, self.y, self.block_size, self.block_size])
+        # Light grey highlight (small rectangle in corner)
+        pygame.draw.rect(surface, (180, 180, 180),  # Much lighter grey
+                        [self.x + self.block_size//4, self.y + self.block_size//4, 
+                         self.block_size//3, self.block_size//3])
+
+    def _draw_pine(self, surface, block):
+        """Draw a simple pine tree (tiny triangle on square)"""
+        # Brown trunk (small square)
+        pygame.draw.rect(surface, self.critter_data['secondary_color'],
+                        [self.x + self.block_size//4, self.y + self.block_size//2, 
+                         self.block_size//2, self.block_size//2])
+        
+        # Simple green triangle
+        points = [
+            (self.x + self.block_size//2, self.y),  # Top
+            (self.x + self.block_size, self.y + self.block_size//2),  # Bottom right
+            (self.x, self.y + self.block_size//2)  # Bottom left
+        ]
+        pygame.draw.polygon(surface, self.critter_data['color'], points)
+
+    def _draw_rocks(self, surface, block):
+        """Draw simple rocks (two distinct grey squares)"""
+        # Darker square
+        pygame.draw.rect(surface, (90, 90, 90),  # Dark grey
+                        [self.x, self.y + self.block_size//3, 
+                         self.block_size*2//3, self.block_size*2//3])
+        # Lighter square
+        pygame.draw.rect(surface, (160, 160, 160),  # Light grey
+                        [self.x + self.block_size//3, self.y, 
+                         self.block_size*2//3, self.block_size*2//3])
+
+    def _draw_dead_tree(self, surface, block):
+        """Draw a simple dead tree (brown trunk with angled branches)"""
+        # Trunk (slightly thinner)
+        pygame.draw.rect(surface, self.critter_data['color'],
+                        [self.x + self.block_size*2//5, self.y, 
+                         self.block_size//5, self.block_size])
+        
+        # Angled branches (shorter and at 45 degrees)
+        points_left = [
+            (self.x + self.block_size*2//5, self.y + self.block_size//3),  # Branch start
+            (self.x, self.y),  # Branch tip
+            (self.x, self.y + self.block_size//4),  # Bottom
+            (self.x + self.block_size*2//5, self.y + self.block_size//2)  # Branch end
+        ]
+        points_right = [
+            (self.x + self.block_size*3//5, self.y + self.block_size//3),  # Branch start
+            (self.x + self.block_size, self.y),  # Branch tip
+            (self.x + self.block_size, self.y + self.block_size//4),  # Bottom
+            (self.x + self.block_size*3//5, self.y + self.block_size//2)  # Branch end
+        ]
+        pygame.draw.polygon(surface, self.critter_data['color'], points_left)
+        pygame.draw.polygon(surface, self.critter_data['color'], points_right)
+
     def _draw_mouse(self, surface, block):
         # Body
         pygame.draw.rect(surface, self.critter_data['color'],

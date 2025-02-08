@@ -80,6 +80,34 @@ CITY_CRITTERS = [
     }
 ]
 
+# Add new mountain critters list after CITY_CRITTERS
+MOUNTAIN_CRITTERS = [
+    {  # Boulder
+        'color': (169, 169, 169),  # Grey
+        'secondary_color': (128, 128, 128),  # Darker grey
+        'size': 20,
+        'type': 'boulder'
+    },
+    {  # Pine Tree
+        'color': (1, 68, 33),  # Dark green
+        'secondary_color': (101, 67, 33),  # Brown trunk
+        'size': 20,
+        'type': 'pine'
+    },
+    {  # Rock Formation
+        'color': (139, 137, 137),  # Light grey
+        'secondary_color': (105, 105, 105),  # Dark grey
+        'size': 20,
+        'type': 'rocks'
+    },
+    {  # Dead Tree
+        'color': (101, 67, 33),  # Brown
+        'secondary_color': (81, 47, 13),  # Darker brown
+        'size': 20,
+        'type': 'dead_tree'
+    }
+]
+
 # Define time-of-day color schemes
 TIMES_OF_DAY = {
     'desert': {
@@ -157,6 +185,32 @@ TIMES_OF_DAY = {
                 (30, 30, 60)      # Light pollution glow
             ],
             'cloud_color': (50, 50, 70),
+            'is_night': True
+        }
+    },
+    'mountain': {
+        'day': {
+            'sky_colors': [
+                (135, 206, 235),  # Light blue
+                (173, 216, 230)   # Lighter blue
+            ],
+            'cloud_color': (255, 255, 255),
+            'is_night': False
+        },
+        'sunset': {
+            'sky_colors': [
+                (255, 160, 120),  # Warm orange
+                (255, 190, 150)   # Light orange-pink
+            ],
+            'cloud_color': (255, 210, 190),
+            'is_night': False
+        },
+        'night': {
+            'sky_colors': [
+                (25, 25, 112),    # Dark blue
+                (45, 45, 150)     # Slightly lighter blue
+            ],
+            'cloud_color': (130, 130, 170),
             'is_night': True
         }
     }
@@ -327,6 +381,32 @@ LEVELS = [
         'play_area': {'top': 135, 'bottom': 600},
         'cutscenes': {
             'intro': 'city_boss_intro'
+        }
+    },
+    {
+        'name': 'Mountains',
+        'biome': 'mountain',
+        'background_colors': {
+            'ground': [
+                (110, 139, 116),  # Mountain green
+                (95, 124, 101),   # Darker mountain green
+                (128, 128, 128),  # Grey rock
+                (105, 105, 105)   # Darker grey rock
+            ]
+        },
+        'obstacles': [
+            {
+                'type': 'mountain_peak',
+                'count': 8,
+                'min_size': 3,
+                'max_size': 6
+            }
+        ],
+        'critters': MOUNTAIN_CRITTERS,  # These are now boulders and trees
+        'required_food': 8,
+        'play_area': {'top': 150, 'bottom': 600},
+        'cutscenes': {
+            'intro': 'mountains_intro'
         }
     }
 ] 

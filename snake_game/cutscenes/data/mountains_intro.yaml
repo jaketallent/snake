@@ -1,0 +1,24 @@
+sprites:
+  snake_god:
+    type: snake_god
+    position: ["center_x", 150]  # Position in sky
+
+initial_state:
+  snake:
+    position: ["center_x", "height - 200"]  # Position snake near bottom
+    is_sleeping: false
+    emote: null
+
+sequence:
+  - type: action
+    duration: 60  # 1 second to look up
+    actions:
+      - ["snake_look_at", "snake_god"]
+
+  - type: action
+    duration: 120  # 2 seconds for god to appear
+    actions:
+      - ["snake_god_appear", true]
+
+  - type: dialogue
+    text: "Lay waste to the mountains."
