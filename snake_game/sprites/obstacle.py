@@ -132,7 +132,7 @@ class Obstacle:
                             [particle_x, particle_y, size, size])
     
     def draw_discharge_effect(self, surface):
-        """Draw electrical discharge effect"""
+        """Draw electrical discharge effect around all segments"""
         time = pygame.time.get_ticks()
         progress = self.effect_timer / self.effect_duration
         
@@ -144,54 +144,58 @@ class Obstacle:
             (100, 100, 255),  # Darker blue
         ]
         
-        # Get object bounds
-        bounds = self.get_hitbox()
+        # Get all hitboxes
+        hitboxes = self.get_hitbox()
+        if not isinstance(hitboxes, list):
+            hitboxes = [hitboxes]
         
-        # Draw lightning arcs around the object
-        num_arcs = 12
-        for i in range(num_arcs):
-            if time % 2 == 0:  # Flicker effect
-                continue
+        # Draw lightning around each segment
+        for bounds in hitboxes:
+            # Draw lightning arcs around the segment
+            num_arcs = 8
+            for i in range(num_arcs):
+                if time % 2 == 0:  # Flicker effect
+                    continue
+                    
+                # Calculate arc start and end points
+                angle = (i / num_arcs) * math.pi * 2 + (time * 0.01)
+                radius = 20 + math.sin(time * 0.1 + i) * 5
                 
-            # Calculate arc start and end points
-            angle = (i / num_arcs) * math.pi * 2 + (time * 0.01)
-            radius = 20 + math.sin(time * 0.1 + i) * 5
+                start_x = bounds.centerx + math.cos(angle) * radius
+                start_y = bounds.centery + math.sin(angle) * radius
+                
+                # Create a jagged lightning line
+                points = [(start_x, start_y)]
+                num_segments = 3
+                end_angle = angle + random.uniform(-0.5, 0.5)
+                end_x = bounds.centerx + math.cos(end_angle) * (radius * 2)
+                end_y = bounds.centery + math.sin(end_angle) * (radius * 2)
+                
+                for j in range(1, num_segments):
+                    t = j / num_segments
+                    mid_x = start_x + (end_x - start_x) * t
+                    mid_y = start_y + (end_y - start_y) * t
+                    # Add some randomness to middle points
+                    mid_x += random.uniform(-5, 5)
+                    mid_y += random.uniform(-5, 5)
+                    points.append((mid_x, mid_y))
+                
+                points.append((end_x, end_y))
+                
+                # Draw the lightning
+                color = discharge_colors[i % len(discharge_colors)]
+                for p1, p2 in zip(points, points[1:]):
+                    pygame.draw.line(surface, color, p1, p2, 2)
             
-            start_x = bounds.centerx + math.cos(angle) * radius
-            start_y = bounds.centery + math.sin(angle) * radius
-            
-            # Create a jagged lightning line
-            points = [(start_x, start_y)]
-            num_segments = 3
-            end_angle = angle + random.uniform(-0.5, 0.5)
-            end_x = bounds.centerx + math.cos(end_angle) * (radius * 2)
-            end_y = bounds.centery + math.sin(end_angle) * (radius * 2)
-            
-            for j in range(1, num_segments):
-                t = j / num_segments
-                mid_x = start_x + (end_x - start_x) * t
-                mid_y = start_y + (end_y - start_y) * t
-                # Add some randomness to middle points
-                mid_x += random.uniform(-5, 5)
-                mid_y += random.uniform(-5, 5)
-                points.append((mid_x, mid_y))
-            
-            points.append((end_x, end_y))
-            
-            # Draw the lightning
-            color = discharge_colors[i % len(discharge_colors)]
-            for p1, p2 in zip(points, points[1:]):
-                pygame.draw.line(surface, color, p1, p2, 2)
-        
-        # Add some particle effects
-        for _ in range(5):
-            angle = random.uniform(0, math.pi * 2)
-            distance = random.uniform(10, 30)
-            x = bounds.centerx + math.cos(angle) * distance
-            y = bounds.centery + math.sin(angle) * distance
-            size = random.randint(2, 4)
-            color = discharge_colors[random.randint(0, len(discharge_colors)-1)]
-            pygame.draw.rect(surface, color, [x, y, size, size])
+            # Add some particle effects
+            for _ in range(3):
+                angle = random.uniform(0, math.pi * 2)
+                distance = random.uniform(10, 30)
+                x = bounds.centerx + math.cos(angle) * distance
+                y = bounds.centery + math.sin(angle) * distance
+                size = random.randint(2, 4)
+                color = discharge_colors[random.randint(0, len(discharge_colors)-1)]
+                pygame.draw.rect(surface, color, [x, y, size, size])
     
     def get_hitbox(self):
         """Return a hitbox for the obstacle"""
@@ -1502,3 +1506,184 @@ class MountainRidge(Obstacle):
                     patch_x = x + random.randint(-15, 15)
                     patch_y = y + random.randint(0, int(snow_line - y))
                     self.snow_patches.append((patch_x, patch_y)) 
+
+class River(Obstacle):
+    def __init__(self, x, y, variations, block_size=20):
+        super().__init__(x, y, variations, block_size)
+        self.can_be_destroyed = False
+        
+        # Store origin point (should be near a mountain)
+        self.origin_x = x
+        self.origin_y = y
+        
+        # Generate river path
+        self.width = min(variations.get('width', 12), 16)  # Cap maximum width
+        self.length = variations.get('length', 300)
+        self.main_direction = variations.get('direction', 1)
+        self.points = self._generate_river_path()
+        
+        # Add grass borders
+        self.grass_colors = [(34, 139, 34), (0, 100, 0)]
+    
+    def _generate_river_path(self):
+        """Generate a river path with right-angle turns"""
+        points = [(self.origin_x, self.origin_y)]
+        current_x = self.origin_x
+        current_y = self.origin_y
+        
+        remaining_length = self.length
+        going_down = True  # Track if we're moving vertically or horizontally
+        
+        while remaining_length > 0:
+            if going_down:
+                # Move down a fixed amount
+                move_length = min(remaining_length, random.randint(40, 60))
+                next_x = current_x
+                next_y = current_y + move_length
+                
+                # Always turn after moving down
+                going_down = False
+            else:
+                # Move horizontally by a fixed amount
+                move_length = min(remaining_length, random.randint(30, 50))
+                next_x = current_x + (self.main_direction * move_length)
+                next_y = current_y
+                
+                # 30% chance to create a fork when moving horizontally
+                if random.random() < 0.3 and remaining_length > self.length * 0.4:
+                    fork_points = self._generate_fork(current_x, current_y, -self.main_direction)
+                    points.extend(fork_points)
+                
+                # Always go back to moving down
+                going_down = True
+            
+            points.append((next_x, next_y))
+            current_x = next_x
+            current_y = next_y
+            remaining_length -= move_length
+        
+        return points
+    
+    def _generate_fork(self, start_x, start_y, direction):
+        """Generate a forked path with right angles"""
+        points = []
+        
+        # Move horizontally first
+        fork_length = random.randint(20, 30)
+        next_x = start_x + (direction * fork_length)
+        points.append((next_x, start_y))
+        
+        # Then move down
+        down_length = random.randint(30, 40)
+        points.append((next_x, start_y + down_length))
+        
+        return points
+    
+    def draw_normal(self, surface):
+        if self.is_discharging:
+            self.draw_discharge_effect(surface)
+        else:
+            # First, draw the grass borders
+            for i in range(len(self.points) - 1):
+                start = self.points[i]
+                end = self.points[i + 1]
+                
+                # Calculate the outer bounds for grass
+                left = min(start[0], end[0]) - self.width//2
+                right = max(start[0], end[0]) + self.width//2
+                top = min(start[1], end[1]) - self.width//2
+                bottom = max(start[1], end[1]) + self.width//2
+                
+                # Draw grass border
+                border_width = 4
+                pygame.draw.rect(surface, self.grass_colors[0],
+                               [left - border_width, top - border_width,
+                                right - left + border_width * 2,
+                                bottom - top + border_width * 2])
+            
+            # Then draw the water as one continuous shape
+            water_colors = [
+                (65, 105, 225),   # Royal blue
+                (30, 144, 255),   # Dodger blue
+                (135, 206, 235),  # Sky blue
+            ]
+            
+            # For each water layer
+            for layer, color in enumerate(reversed(water_colors)):
+                shrink = layer * 2
+                
+                # Draw each segment with pixelated water
+                for i in range(len(self.points) - 1):
+                    start = self.points[i]
+                    end = self.points[i + 1]
+                    
+                    # Calculate water bounds
+                    left = min(start[0], end[0]) - self.width//2 + shrink
+                    right = max(start[0], end[0]) + self.width//2 - shrink
+                    top = min(start[1], end[1]) - self.width//2 + shrink
+                    bottom = max(start[1], end[1]) + self.width//2 - shrink
+                    
+                    # Draw pixelated water
+                    pixel_size = 4
+                    for px in range(int(left), int(right), pixel_size):
+                        for py in range(int(top), int(bottom), pixel_size):
+                            # Skip pixels outside the river shape
+                            if not self._is_point_in_river(px, py, start, end):
+                                continue
+                            
+                            # Animated edges
+                            if self._is_edge_pixel(px, py, left, right, top, bottom, pixel_size):
+                                if random.random() > 0.7:
+                                    continue
+                            
+                            pygame.draw.rect(surface, color, [px, py, pixel_size, pixel_size])
+
+    def _is_point_in_river(self, px, py, start, end):
+        """Check if a point is within the river segment including corners"""
+        # For vertical segments
+        if abs(end[1] - start[1]) > abs(end[0] - start[0]):
+            # Check if point is within width of the segment
+            return abs(px - start[0]) <= self.width//2
+        # For horizontal segments
+        else:
+            # Check if point is within width of the segment
+            return abs(py - start[1]) <= self.width//2
+
+    def _is_edge_pixel(self, px, py, left, right, top, bottom, pixel_size):
+        """Check if a pixel is on the edge of the river"""
+        edge_margin = pixel_size * 2
+        return (px <= left + edge_margin or 
+                px >= right - edge_margin or
+                py <= top + edge_margin or 
+                py >= bottom - edge_margin)
+    
+    def get_hitbox(self):
+        """Return a series of rectangles for the river's path"""
+        hitboxes = []
+        
+        for i in range(len(self.points) - 1):
+            start = self.points[i]
+            end = self.points[i + 1]
+            
+            # Create a rectangle for this segment
+            left = min(start[0], end[0]) - self.width//2
+            right = max(start[0], end[0]) + self.width//2
+            top = min(start[1], end[1])
+            bottom = max(start[1], end[1])
+            
+            hitboxes.append(pygame.Rect(
+                left, top, right - left, bottom - top
+            ))
+        
+        return hitboxes
+    
+    def get_no_spawn_rects(self):
+        """Return hitboxes plus some buffer zone"""
+        base_hitboxes = self.get_hitbox()
+        buffer_hitboxes = []
+        
+        for hitbox in base_hitboxes:
+            # Add buffer zone around each segment
+            buffer_hitboxes.append(hitbox.inflate(20, 20))
+        
+        return buffer_hitboxes 

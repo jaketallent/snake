@@ -3,7 +3,7 @@ import random
 import math
 from sprites.food import Food
 from sprites.obstacle import (Cactus, Tree, Bush, Pond, Building, 
-                            Park, Lake, Rubble, MountainPeak, MountainRidge)
+                            Park, Lake, Rubble, MountainPeak, MountainRidge, River)
 from sprites.snake import Snake
 from .sky_manager import SkyManager
 from .level_data import TIMES_OF_DAY
@@ -283,6 +283,65 @@ class BaseLevel:
                     size = random.randint(min_size, max_size)
                     variations = {'size': size}
                     new_obstacle = MountainRidge(x, y, variations, self.block_size)
+                elif obstacle_type == 'river':
+                    # Find mountains to start from
+                    mountain_peaks = [obs for obs in self.obstacles 
+                                     if isinstance(obs, MountainPeak)]
+                    
+                    if not mountain_peaks:
+                        tries += 1
+                        continue
+                    
+                    # Pick a random mountain
+                    source_mountain = random.choice(mountain_peaks)
+                    mountain_base = source_mountain.get_hitbox()
+                    
+                    # Determine which side of the mountain to start from
+                    mountain_center_x = mountain_base.centerx
+                    screen_center_x = self.game.width // 2
+                    
+                    # Calculate start position to ensure river starts under the mountain
+                    if mountain_center_x < screen_center_x:
+                        start_x = mountain_base.centerx + random.randint(0, mountain_base.width//4)
+                        direction = 1  # Flow right
+                    else:
+                        start_x = mountain_base.centerx - random.randint(0, mountain_base.width//4)
+                        direction = -1  # Flow left
+                    
+                    start_y = mountain_base.bottom - 5  # Start slightly higher
+                    
+                    variations = {
+                        'width': random.randint(min_size, max_size) * 4,  # Make rivers even narrower
+                        'length': random.randint(200, 300),
+                        'direction': direction
+                    }
+                    new_obstacle = River(start_x, start_y, variations, self.block_size)
+                    
+                    # Check if the river would go off-screen or too close to other rivers
+                    collision = False
+                    for obs in self.obstacles:
+                        if isinstance(obs, River):
+                            for hitbox in obs.get_hitbox():
+                                for new_hitbox in new_obstacle.get_hitbox():
+                                    if hitbox.inflate(30, 30).colliderect(new_hitbox):  # Reduced spacing
+                                        collision = True
+                                        break
+                                if collision:
+                                    break
+                        if collision:
+                            break
+                    
+                    # Also check if river goes off-screen
+                    for hitbox in new_obstacle.get_hitbox():
+                        if (hitbox.left < 0 or hitbox.right > self.game.width or
+                            hitbox.bottom > self.play_area['bottom']):
+                            collision = True
+                            break
+                    
+                    if not collision:
+                        self.obstacles.append(new_obstacle)
+                    
+                    tries += 1
                 else:
                     tries += 1
                     continue

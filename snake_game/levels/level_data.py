@@ -400,6 +400,12 @@ LEVELS = [
                 'count': 8,
                 'min_size': 3,
                 'max_size': 6
+            },
+            {
+                'type': 'river',
+                'count': 3,
+                'min_size': 2,
+                'max_size': 4
             }
         ],
         'critters': MOUNTAIN_CRITTERS,  # These are now boulders and trees
