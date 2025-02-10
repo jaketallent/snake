@@ -699,12 +699,28 @@ class BaseLevel:
         for obstacle in self.obstacles:
             hitbox = obstacle.get_hitbox()
             if hitbox is not None:
-                # Handle both single hitbox and multiple hitboxes
+                collision = False
                 if isinstance(hitbox, list):
-                    collision = any(box.colliderect(snake_rect) for box in hitbox)
-                else:
+                    for box in hitbox:
+                        # Ensure box is a valid pygame.Rect
+                        if not isinstance(box, pygame.Rect):
+                            try:
+                                box = pygame.Rect(*box)
+                            except Exception:
+                                continue
+                        if snake_rect.colliderect(box):
+                            collision = True
+                            break
+                elif isinstance(hitbox, pygame.Rect):
                     collision = snake_rect.colliderect(hitbox)
-                    
+                elif isinstance(hitbox, (list, tuple)) and len(hitbox) == 4:
+                    try:
+                        rect = pygame.Rect(*hitbox)
+                    except Exception:
+                        rect = None
+                    if rect and snake_rect.colliderect(rect):
+                        collision = True
+                        break
                 if collision:
                     # Skip if already being destroyed or discharged
                     if hasattr(obstacle, 'is_being_destroyed') and obstacle.is_being_destroyed:
@@ -754,22 +770,14 @@ class BaseLevel:
                     test_y = original_y + (snake.dy * 0.5)  # Try moving halfway
                     test_rect = prev_rect.copy()
                     test_rect.y = test_y + offset
-                    if not any(obstacle.get_hitbox() is not None and 
-                              (isinstance(obstacle.get_hitbox(), list) and 
-                               any(box.colliderect(test_rect) for box in obstacle.get_hitbox()) or
-                               obstacle.get_hitbox().colliderect(test_rect))
-                              for obstacle in self.obstacles):
+                    if not any(self._hitbox_collides(obstacle, test_rect) for obstacle in self.obstacles):
                         snake.move_to(original_x, test_y)
                 elif snake.dy != 0:  # If moving vertically
                     # Allow slight horizontal position adjustment
                     test_x = original_x + (snake.dx * 0.5)  # Try moving halfway
                     test_rect = prev_rect.copy()
                     test_rect.x = test_x + offset
-                    if not any(obstacle.get_hitbox() is not None and 
-                              (isinstance(obstacle.get_hitbox(), list) and 
-                               any(box.colliderect(test_rect) for box in obstacle.get_hitbox()) or
-                               obstacle.get_hitbox().colliderect(test_rect))
-                              for obstacle in self.obstacles):
+                    if not any(self._hitbox_collides(obstacle, test_rect) for obstacle in self.obstacles):
                         snake.move_to(test_x, original_y)
             else:
                 # Actually move to the collision position
@@ -1156,4 +1164,33 @@ class BaseLevel:
                 for rect in no_spawn_rects:
                     if food_rect.colliderect(rect):
                         return True
+        return False
+
+    def _hitbox_collides(self, obstacle, rect):
+        """
+        Safely check if the obstacle's hitbox collides with the given rect.
+        Handles single hitboxes, lists of hitboxes, or 4-element tuples.
+        """
+        hitbox = obstacle.get_hitbox()
+        if hitbox is None:
+            return False
+        if isinstance(hitbox, list):
+            for box in hitbox:
+                # Ensure box is a valid pygame.Rect
+                if not isinstance(box, pygame.Rect):
+                    try:
+                        box = pygame.Rect(*box)
+                    except Exception:
+                        continue
+                if rect.colliderect(box):
+                    return True
+            return False
+        elif isinstance(hitbox, pygame.Rect):
+            return rect.colliderect(hitbox)
+        elif isinstance(hitbox, (list, tuple)) and len(hitbox) == 4:
+            try:
+                h_rect = pygame.Rect(*hitbox)
+            except Exception:
+                return False
+            return rect.colliderect(h_rect)
         return False 
