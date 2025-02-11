@@ -1,7 +1,11 @@
 sprites:
   snake_god:
     type: snake_god
-    position: ["center_x", 150]  # Position in sky
+    position: ["center_x - 200", 150]  # Position left side
+  
+  bird_god:
+    type: bird_god
+    position: ["center_x + 200", 150]  # Position right side
 
 initial_state:
   snake:
@@ -13,12 +17,52 @@ sequence:
   - type: action
     duration: 60  # 1 second to look up
     actions:
-      - ["snake_look_at", "snake_god"]
+      - ["snake_look_at", "bird_god"]
 
   - type: action
-    duration: 120  # 2 seconds for god to appear
+    duration: 120  # 2 seconds for bird god to appear
     actions:
-      - ["snake_god_appear", true]
+      - ["bird_god_appear", true]
 
   - type: dialogue
-    text: "Lay waste to the mountains."
+    text: "So... the serpent has grown strong."
+
+  - type: dialogue
+    text: "Did you think you could rampage through the world without consequence?"
+
+  - type: action
+    duration: 120
+    actions:
+      - ["snake_god_appear", true]
+      - ["snake_look_at", "snake_god"]
+
+  - type: dialogue
+    text: "My child acts with my blessing, feathered usurper."
+
+  - type: action
+    duration: 60
+    actions:
+      - ["snake_look_at", "bird_god"]
+
+  - type: dialogue
+    text: "Turn back now, serpent. The mountains are our domain. You will find only death here."
+
+  - type: dialogue
+    text: "Your kind are not welcome in these heights."
+
+  - type: action
+    duration: 60
+    actions:
+      - ["snake_look_at", "snake_god"]
+
+  - type: dialogue
+    text: "Pay no heed to these threats, my child."
+
+  - type: dialogue
+    text: "The mountains themselves shall fall before your might."
+
+  - type: dialogue
+    text: "Destroy their peaks. Let the rivers run dry."
+
+  - type: dialogue
+    text: "Show these birds what true power means."

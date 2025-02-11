@@ -207,6 +207,9 @@ class BaseCutscene:
             elif action[0] == 'snake_god_appear':
                 if action[1]:
                     self.sprites['snake_god'].fade_in(3)
+            elif action[0] == 'bird_god_appear':
+                if action[1]:
+                    self.sprites['bird_god'].fade_in(3)
     
     def resolve_position(self, position):
         """Convert position with variables into actual coordinates"""
