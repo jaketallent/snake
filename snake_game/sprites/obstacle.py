@@ -1552,26 +1552,82 @@ class MountainRidge(Obstacle):
 class River(Obstacle):
     def __init__(self, x, y, variations, block_size=20):
         super().__init__(x, y, variations, block_size)
-        self.can_be_destroyed = False
+        self.width = variations['width']
+        self.length = variations['length']
+        self.direction = variations['direction']
+        self.source_mountain = None  # NEW: Track the source mountain
+        self.drying_up = False      # NEW: Track drying state
+        self.dry_timer = 0          # NEW: Timer for drying animation
+        self.dry_duration = 30      # Faster drying animation (was 60)
+        self.can_be_destroyed = False  # Make rivers indestructible like ponds
         
-        # Store origin point (should be near a mountain)
-        self.origin_x = x
-        self.origin_y = y
-        
-        # Generate river path
-        self.width = min(variations.get('width', 12), 16)  # Cap maximum width
-        self.length = variations.get('length', 300)
-        self.main_direction = variations.get('direction', 1)
+        # Create river path points
         self.points = self._generate_river_path()
+
+    # Add new method for drying animation
+    def start_drying(self):
+        """Start the drying up animation"""
+        self.drying_up = True
+        self.dry_timer = 0
+    
+    # Modify draw_normal to handle drying animation
+    def draw_normal(self, surface):
+        if self.drying_up:
+            # Calculate fade based on dry_timer
+            fade_progress = self.dry_timer / self.dry_duration
+            base_alpha = int(255 * (1 - fade_progress))
+            
+            # Create a surface for the fading river
+            river_surface = pygame.Surface((self.game.width, self.game.height), pygame.SRCALPHA)
+            
+            # Draw the river to this surface
+            self._draw_river_body(river_surface, base_alpha)
+            
+            # Blit the fading river to the main surface
+            surface.blit(river_surface, (0, 0))
+        else:
+            # Normal drawing
+            self._draw_river_body(surface)
+    
+    # Move existing river drawing code to new method
+    def _draw_river_body(self, surface, alpha=255):
+        """Draw the river body with optional alpha"""
+        pixel_size = 4  # Define pixel_size at the start of the method
         
-        # Add grass borders
-        self.grass_colors = [(34, 139, 34), (0, 100, 0)]
+        # Draw water first
+        water_colors = [
+            (65, 105, 225, alpha),   # Royal blue
+            (30, 144, 255, alpha),   # Dodger blue
+            (135, 206, 235, alpha),  # Sky blue
+        ]
+        
+        # Draw water layers
+        for layer, color in enumerate(reversed(water_colors)):
+            shrink = layer * 2
+            for i in range(len(self.points) - 1):
+                start = self.points[i]
+                end = self.points[i + 1]
+                
+                left = min(start[0], end[0]) - self.width//2 + shrink
+                right = max(start[0], end[0]) + self.width//2 + shrink
+                top = min(start[1], end[1]) - self.width//2 + shrink
+                bottom = max(start[1], end[1]) + self.width//2 + shrink
+                
+                for px in range(int(left), int(right), pixel_size):
+                    for py in range(int(top), int(bottom), pixel_size):
+                        if not self._is_point_in_river(px, py, start, end):
+                            continue
+                        
+                        # Increase edge pixelation effect for better blending
+                        if self._is_edge_pixel(px, py, left, right, top, bottom, pixel_size) and random.random() > 0.5:
+                            continue
+                        pygame.draw.rect(surface, color, [px, py, pixel_size, pixel_size])
     
     def _generate_river_path(self):
         """Generate a river path with right-angle turns"""
-        points = [(self.origin_x, self.origin_y)]
-        current_x = self.origin_x
-        current_y = self.origin_y
+        points = [(self.x, self.y)]  # Use self.x and self.y instead of origin_x/y
+        current_x = self.x
+        current_y = self.y
         
         remaining_length = self.length
         going_down = True  # Track if we're moving vertically or horizontally
@@ -1588,12 +1644,12 @@ class River(Obstacle):
             else:
                 # Move horizontally by a fixed amount
                 move_length = min(remaining_length, random.randint(30, 50))
-                next_x = current_x + (self.main_direction * move_length)
+                next_x = current_x + (self.direction * move_length)  # Use self.direction instead of main_direction
                 next_y = current_y
                 
                 # 30% chance to create a fork when moving horizontally
                 if random.random() < 0.3 and remaining_length > self.length * 0.4:
-                    fork_points = self._generate_fork(current_x, current_y, -self.main_direction)
+                    fork_points = self._generate_fork(current_x, current_y, -self.direction)  # Use self.direction
                     points.extend(fork_points)
                 
                 # Always go back to moving down
@@ -1620,84 +1676,6 @@ class River(Obstacle):
         points.append((next_x, start_y + down_length))
         
         return points
-    
-    def draw_normal(self, surface):
-        if self.is_discharging:
-            self.draw_discharge_effect(surface)
-        else:
-            # First, draw the grass borders
-            for i in range(len(self.points) - 1):
-                start = self.points[i]
-                end = self.points[i + 1]
-                
-                # Calculate the outer bounds for grass
-                left = min(start[0], end[0]) - self.width//2
-                right = max(start[0], end[0]) + self.width//2
-                top = min(start[1], end[1]) - self.width//2
-                bottom = max(start[1], end[1]) + self.width//2
-                
-                # Draw grass border
-                border_width = 4
-                pygame.draw.rect(surface, self.grass_colors[0],
-                               [left - border_width, top - border_width,
-                                right - left + border_width * 2,
-                                bottom - top + border_width * 2])
-            
-            # Then draw the water as one continuous shape
-            water_colors = [
-                (65, 105, 225),   # Royal blue
-                (30, 144, 255),   # Dodger blue
-                (135, 206, 235),  # Sky blue
-            ]
-            
-            # For each water layer
-            for layer, color in enumerate(reversed(water_colors)):
-                shrink = layer * 2
-                
-                # Draw each segment with pixelated water
-                for i in range(len(self.points) - 1):
-                    start = self.points[i]
-                    end = self.points[i + 1]
-                    
-                    # Calculate water bounds
-                    left = min(start[0], end[0]) - self.width//2 + shrink
-                    right = max(start[0], end[0]) + self.width//2 - shrink
-                    top = min(start[1], end[1]) - self.width//2 + shrink
-                    bottom = max(start[1], end[1]) + self.width//2 - shrink
-                    
-                    # Draw pixelated water
-                    pixel_size = 4
-                    for px in range(int(left), int(right), pixel_size):
-                        for py in range(int(top), int(bottom), pixel_size):
-                            # Skip pixels outside the river shape
-                            if not self._is_point_in_river(px, py, start, end):
-                                continue
-                            
-                            # Animated edges
-                            if self._is_edge_pixel(px, py, left, right, top, bottom, pixel_size):
-                                if random.random() > 0.7:
-                                    continue
-                            
-                            pygame.draw.rect(surface, color, [px, py, pixel_size, pixel_size])
-
-    def _is_point_in_river(self, px, py, start, end):
-        """Check if a point is within the river segment including corners"""
-        # For vertical segments
-        if abs(end[1] - start[1]) > abs(end[0] - start[0]):
-            # Check if point is within width of the segment
-            return abs(px - start[0]) <= self.width//2
-        # For horizontal segments
-        else:
-            # Check if point is within width of the segment
-            return abs(py - start[1]) <= self.width//2
-
-    def _is_edge_pixel(self, px, py, left, right, top, bottom, pixel_size):
-        """Check if a pixel is on the edge of the river"""
-        edge_margin = pixel_size * 2
-        return (px <= left + edge_margin or 
-                px >= right - edge_margin or
-                py <= top + edge_margin or 
-                py >= bottom - edge_margin)
     
     def get_hitbox(self):
         """Return a series of rectangles for the river's path"""
@@ -1729,3 +1707,22 @@ class River(Obstacle):
             buffer_hitboxes.append(hitbox.inflate(20, 20))
         
         return buffer_hitboxes 
+
+    def _is_point_in_river(self, px, py, start, end):
+        """Check if a point is within the river segment including corners"""
+        # For vertical segments
+        if abs(end[1] - start[1]) > abs(end[0] - start[0]):
+            # Check if point is within width of the segment
+            return abs(px - start[0]) <= self.width//2
+        # For horizontal segments
+        else:
+            # Check if point is within width of the segment
+            return abs(py - start[1]) <= self.width//2
+    
+    def _is_edge_pixel(self, px, py, left, right, top, bottom, pixel_size):
+        """Check if a pixel is on the edge of the river"""
+        edge_margin = pixel_size * 2
+        return (px <= left + edge_margin or 
+                px >= right - edge_margin or
+                py <= top + edge_margin or 
+                py >= bottom - edge_margin)

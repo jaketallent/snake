@@ -316,6 +316,8 @@ class BaseLevel:
                         'direction': direction
                     }
                     new_obstacle = River(start_x, start_y, variations, self.block_size)
+                    new_obstacle.source_mountain = source_mountain  # NEW: Store reference to source mountain
+                    new_obstacle.game = self.game  # Ensure game reference is set
                     
                     # Check if the river would go off-screen or too close to other rivers
                     collision = False
@@ -1031,10 +1033,12 @@ class BaseLevel:
         for obs in self.obstacles[:]:  # iterate over a copy, so we can remove
             if obs.update_destruction():
                 if obs.is_being_destroyed and obs.can_be_destroyed:
-                    # >>> NEW: If this is a city building, increment buildings_destroyed
-                    if self.level_data['biome'] == 'city' and isinstance(obs, Building):
-                        self.buildings_destroyed += 1
-                    # <<< end NEW
+                    # If it's a mountain peak, start drying connected rivers
+                    if isinstance(obs, MountainPeak):
+                        # Find and start drying all rivers connected to this mountain
+                        for river in [r for r in self.obstacles if isinstance(r, River)]:
+                            if river.source_mountain == obs:
+                                river.start_drying()
                     
                     # If it's a building in the city, spawn rubble
                     if isinstance(obs, Building) and self.level_data['biome'] == 'city':
@@ -1053,6 +1057,12 @@ class BaseLevel:
                         self.obstacles.append(new_rubble)
                     
                     # Remove the destroyed obstacle from the list
+                    self.obstacles.remove(obs)
+            
+            # Handle river drying animation
+            elif isinstance(obs, River) and obs.drying_up:
+                obs.dry_timer += 1
+                if obs.dry_timer >= obs.dry_duration:
                     self.obstacles.remove(obs)
         
         # Update snake projectiles
