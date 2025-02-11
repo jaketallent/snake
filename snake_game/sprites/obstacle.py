@@ -965,6 +965,48 @@ class Building(Obstacle):
         base_height = self.base_height  # The bottom portion
         return pygame.Rect(self.x, self.y, width, base_height)
 
+    def get_top_bounding_rect(self):
+        """Returns the pygame.Rect covering the mountain's top section"""
+        return pygame.Rect(
+            self.x + self.width * 0.15,  # Match the visual mountain top
+            self.y,  # Top of mountain
+            self.width * 0.7,  # Width of mountain top
+            self.height - self.base_height  # Height excluding base
+        )
+
+    def get_no_spawn_rects(self):
+        """Return both the base hitbox and the top bounding rect for food spawn checks"""
+        rects = []
+        
+        # Get the base hitbox
+        base_rect = pygame.Rect(
+            self.x, 
+            self.y, 
+            self.variations['width'] * 16,
+            self.variations['base_height']
+        )
+        rects.append(base_rect)
+        
+        # Get the top section hitbox
+        top_height = self.variations['height'] * 24 - self.variations['base_height']
+        if top_height > 0:
+            top_rect = pygame.Rect(
+                self.x,
+                self.y - top_height,  # Start from where the top section begins
+                self.variations['width'] * 16,
+                top_height
+            )
+            rects.append(top_rect)
+        
+        # Add a small buffer zone around both sections
+        buffer_rects = []
+        for rect in rects:
+            buffer_rect = rect.inflate(20, 20)
+            buffer_rect.center = rect.center
+            buffer_rects.append(buffer_rect)
+        
+        return buffer_rects
+
 class Park(Obstacle):
     def __init__(self, x, y, variations, block_size=20):
         super().__init__(x, y, variations, block_size)
