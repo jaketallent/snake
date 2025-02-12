@@ -53,6 +53,7 @@ sequence:
   
   - type: dialogue
     text: "I am the snake god."
+    focus: "snake_god"
 
   - type: dialogue
     text: "Despair not, my child."

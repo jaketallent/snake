@@ -69,28 +69,20 @@ class SnakeGod:
         self.y = y
         self.block_size = block_size
         self.alpha = 0
-        self.overlay_alpha = 0
     
     def draw(self, surface):
         if self.alpha <= 0:
             return
             
-        # Create overlay for darkening effect
-        overlay = pygame.Surface((surface.get_width(), surface.get_height()))
-        overlay.fill((0, 0, 0))
-        overlay.set_alpha(self.overlay_alpha)
-        surface.blit(overlay, (0, 0))
-        
         # Create a surface for the snake god with transparency
         size = self.block_size
         width = size * 8
-        height = size * 6  # Made taller
-        god_surface = pygame.Surface((width, height + size), pygame.SRCALPHA)  # Extra height for fangs
+        height = size * 6
+        god_surface = pygame.Surface((width, height + size), pygame.SRCALPHA)
         
         # Draw the giant snake head
-        for i in range(6):  # Increased height
+        for i in range(6):
             for j in range(8):
-                # Create shading pattern
                 color = (0, 200, 0) if (i == 5 or j == 7) else (0, 255, 0)
                 pygame.draw.rect(god_surface, (*color, self.alpha),
                                [j * size, i * size, size, size])
@@ -102,27 +94,36 @@ class SnakeGod:
         pygame.draw.rect(god_surface, eye_color,
                         [5 * size, 2 * size, size, size])
         
-        # Draw fangs extending below the head
+        # Draw fangs
         fang_color = (255, 255, 255, self.alpha)
         fang_width = size // 2
-        fang_height = size * 1.5  # Longer fangs
-        # Left fang
+        fang_height = size * 1.5
         pygame.draw.rect(god_surface, fang_color,
                         [2 * size, 6 * size, fang_width, fang_height])
-        # Right fang
         pygame.draw.rect(god_surface, fang_color,
                         [5 * size + size//2, 6 * size, fang_width, fang_height])
         
-        # Center the snake god in the sky
+        # Center the sprite at the specified position
         god_rect = god_surface.get_rect(center=(self.x, self.y))
         surface.blit(god_surface, god_rect)
     
     def fade_in(self, amount=5):
         self.alpha = min(255, self.alpha + amount)
-        self.overlay_alpha = min(128, self.overlay_alpha + amount // 2)
     
     def fade_out(self, amount=5):
         self.alpha = max(0, self.alpha - amount) 
+
+    def get_sprite_rect(self):
+        """Return the rectangle that encompasses the sprite"""
+        size = self.block_size
+        width = size * 8
+        height = size * 6
+        return pygame.Rect(
+            self.x - width // 2,  # Center horizontally
+            self.y - height // 2,  # Center vertically
+            width,
+            height + size  # Add extra height for fangs
+        )
 
 class BirdGod:
     def __init__(self, x, y, block_size=30):
@@ -130,7 +131,6 @@ class BirdGod:
         self.y = y
         self.block_size = block_size
         self.alpha = 0
-        self.overlay_alpha = 0
         self.wing_angle = 0
         self.wing_speed = 0.05
     
@@ -138,12 +138,6 @@ class BirdGod:
         if self.alpha <= 0:
             return
             
-        # Create overlay for darkening effect
-        overlay = pygame.Surface((surface.get_width(), surface.get_height()))
-        overlay.fill((0, 0, 0))
-        overlay.set_alpha(self.overlay_alpha)
-        surface.blit(overlay, (0, 0))
-        
         # Create a surface for the bird god with transparency
         size = self.block_size
         width = size * 12  # Wider for wings
@@ -259,10 +253,21 @@ class BirdGod:
     
     def fade_in(self, amount=5):
         self.alpha = min(255, self.alpha + amount)
-        self.overlay_alpha = min(128, self.overlay_alpha + amount // 2)
     
     def fade_out(self, amount=5):
         self.alpha = max(0, self.alpha - amount)
+
+    def get_sprite_rect(self):
+        """Return the rectangle that encompasses the sprite"""
+        size = self.block_size
+        width = size * 12  # Account for wings
+        height = size * 6
+        return pygame.Rect(
+            self.x - width // 2,  # Center horizontally
+            self.y - height // 2,  # Center vertically
+            width,
+            height
+        )
 
 class Nest:
     def __init__(self, x, y, block_size=20):

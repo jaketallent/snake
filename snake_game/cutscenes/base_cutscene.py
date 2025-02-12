@@ -15,6 +15,12 @@ class BaseCutscene:
         self.waiting_for_input = False
         self.is_complete = False
         self.current_dialogue_shown = False
+        self.overlay_alpha = 0  # Scene darkening
+        self.target_alpha = 128  # Max darkness
+        self.current_focus = None
+        self.fade_duration = 120  # 2 seconds at 60fps
+        self.transition_speed = 128 / 120  # Speed to reach target_alpha in fade_duration frames
+        self.sprite_focus_states = {}  # Start with empty focus states
         
         self.load_cutscene(cutscene_id)
         self.setup_sprites()
@@ -34,9 +40,11 @@ class BaseCutscene:
             x, y = self.resolve_position(config['position'])
             sprite = CutsceneSprites.create(config['type'], x, y)
             self.add_sprite(name, sprite)
-            
-        # Set up snake if specified
+            self.sprite_focus_states[name] = 0  # Initialize focus state
+        
+        # Initialize snake focus state only if snake is in the cutscene
         if 'snake' in self.data:
+            self.sprite_focus_states['snake'] = 0
             snake = self.game.snake
             pos = self.data['snake']['position']
             snake.x, snake.y = self.resolve_position(pos)
@@ -61,7 +69,23 @@ class BaseCutscene:
     def update(self):
         if self.is_complete:
             return
+        
+        # Smoothly adjust scene darkening when any god is present
+        if any(hasattr(sprite, 'alpha') and sprite.alpha > 0 for sprite in self.sprites.values()):
+            self.overlay_alpha = min(self.target_alpha, self.overlay_alpha + self.transition_speed)
+        else:
+            self.overlay_alpha = max(0, self.overlay_alpha - self.transition_speed)
+        
+        # Update focus transitions for each sprite and snake
+        for name in list(self.sprites.keys()) + ['snake']:
+            target = 1.0 if name == self.current_focus else 0.0
+            current = self.sprite_focus_states.get(name, 0)
             
+            if current < target:
+                self.sprite_focus_states[name] = min(target, current + 0.05)
+            elif current > target:
+                self.sprite_focus_states[name] = max(target, current - 0.05)
+        
         if self.sequence_index >= len(self.sequence):
             self.end_sequence()
             return
@@ -78,11 +102,55 @@ class BaseCutscene:
         self.sequence_time += 1
     
     def draw(self, surface):
-        # Draw all sprites
-        for sprite in self.sprites.values():
-            sprite.draw(surface)
+        # Draw darkening overlay first
+        if self.overlay_alpha > 0:
+            overlay = pygame.Surface(surface.get_rect().size, pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, self.overlay_alpha))
+            surface.blit(overlay, (0, 0))
         
-        # Draw dialogue if active
+        # Draw all sprites with appropriate alpha
+        for name, sprite in self.sprites.items():
+            # Store original alpha
+            original_alpha = sprite.alpha if hasattr(sprite, 'alpha') else 255
+            
+            # Calculate focus-adjusted alpha
+            focus_factor = self.sprite_focus_states.get(name, 0)
+            darkening = self.overlay_alpha * (1 - focus_factor)
+            
+            # Apply adjusted alpha
+            if hasattr(sprite, 'alpha'):
+                sprite.alpha = int(original_alpha * (1 - darkening / 255))
+            
+            # Draw the sprite
+            sprite.draw(surface)
+            
+            # Restore original alpha
+            if hasattr(sprite, 'alpha'):
+                sprite.alpha = original_alpha
+        
+        # Handle snake drawing with focus only if snake is in cutscene
+        if 'snake' in self.sprite_focus_states:
+            # Store snake's original alpha
+            original_snake_alpha = self.game.snake.alpha if hasattr(self.game.snake, 'alpha') else 255
+            
+            # Calculate focus-adjusted alpha exactly like sprites
+            if self.overlay_alpha > 0:
+                focus_factor = self.sprite_focus_states.get('snake', 0)
+                darkening = self.overlay_alpha * (1 - focus_factor)
+                snake_alpha = int(original_snake_alpha * (1 - darkening / 255))
+            else:
+                snake_alpha = original_snake_alpha
+            
+            # Apply alpha and draw
+            if hasattr(self.game.snake, 'alpha'):
+                self.game.snake.alpha = snake_alpha
+            self.game.snake.draw(surface)
+            
+            # Restore original alpha
+            if hasattr(self.game.snake, 'alpha'):
+                self.game.snake.alpha = original_snake_alpha
+        
+        # Draw dialogue last
         if self.dialogue_text:
             self._draw_dialogue(surface)
     
@@ -153,6 +221,9 @@ class BaseCutscene:
             if not self.dialogue_text and not self.current_dialogue_shown:
                 self.show_dialogue(sequence['text'])
                 self.current_dialogue_shown = True
+                # Update focus if specified, otherwise maintain current focus
+                if 'focus' in sequence:
+                    self.current_focus = sequence['focus']
                 if 'actions' in sequence:
                     self.perform_actions(sequence['actions'])
             return not self.waiting_for_input
@@ -161,6 +232,9 @@ class BaseCutscene:
             progress = min(1.0, self.sequence_time / sequence['duration'])
             if 'actions' in sequence:
                 self.perform_actions(sequence['actions'], progress)
+            # Allow focus changes in action sequences too
+            if 'focus' in sequence:
+                self.current_focus = sequence['focus']
             return progress >= 1.0
     
     def perform_actions(self, actions, progress=None):
@@ -206,10 +280,12 @@ class BaseCutscene:
                         nest.has_eggs = False
             elif action[0] == 'snake_god_appear':
                 if action[1]:
-                    self.sprites['snake_god'].fade_in(3)
+                    # Match fade-in speed with scene darkening
+                    self.sprites['snake_god'].fade_in(255 / self.fade_duration)
             elif action[0] == 'bird_god_appear':
                 if action[1]:
-                    self.sprites['bird_god'].fade_in(3)
+                    # Match fade-in speed with scene darkening
+                    self.sprites['bird_god'].fade_in(255 / self.fade_duration)
     
     def resolve_position(self, position):
         """Convert position with variables into actual coordinates"""

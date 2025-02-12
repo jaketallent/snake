@@ -26,6 +26,7 @@ sequence:
 
   - type: dialogue
     text: "So... the serpent has grown strong."
+    focus: "bird_god"
 
   - type: dialogue
     text: "Did you think you could rampage through the world without consequence?"
@@ -38,31 +39,19 @@ sequence:
 
   - type: dialogue
     text: "My child acts with my blessing, feathered usurper."
-
-  - type: action
-    duration: 60
-    actions:
-      - ["snake_look_at", "bird_god"]
-
-  - type: dialogue
-    text: "Turn back now, serpent. The mountains are our domain. You will find only death here."
-
-  - type: dialogue
-    text: "Your kind are not welcome in these heights."
-
-  - type: action
-    duration: 60
-    actions:
-      - ["snake_look_at", "snake_god"]
+    focus: "snake_god"
 
   - type: dialogue
     text: "Pay no heed to these threats, my child."
 
   - type: dialogue
     text: "The mountains themselves shall fall before your might."
+    focus: "snake_god"
 
   - type: dialogue
     text: "Destroy their peaks. Let the rivers run dry."
+    focus: "snake_god"
 
   - type: dialogue
     text: "Show these birds what true power means."
+    focus: "snake_god"
