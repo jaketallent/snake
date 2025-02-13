@@ -70,6 +70,11 @@ class BaseCutscene:
         if self.is_complete:
             return
         
+        # Update all sprites that have an update method
+        for sprite in self.sprites.values():
+            if hasattr(sprite, 'update'):
+                sprite.update()
+        
         # Smoothly adjust scene darkening when any god is present
         if any(hasattr(sprite, 'alpha') and sprite.alpha > 0 for sprite in self.sprites.values()):
             self.overlay_alpha = min(self.target_alpha, self.overlay_alpha + self.transition_speed)
@@ -109,7 +114,7 @@ class BaseCutscene:
             surface.blit(overlay, (0, 0))
         
         # Add "ESC = Skip" text under level name
-        skip_text = self.game.font.render("ESC = Skip", True, (128, 128, 128))  # Gray color
+        skip_text = self.game.font.render("Esc = Skip", True, (128, 128, 128))  # Gray color
         skip_rect = skip_text.get_rect(topleft=(10, 35))  # Position under level name
         surface.blit(skip_text, skip_rect)
         
@@ -251,6 +256,8 @@ class BaseCutscene:
                 self.game.snake.look_at((target.x + 15, target.y - 5))
             elif action[0] == 'snake_sleep':
                 self.game.snake.is_sleeping = action[1]
+            elif action[0] == 'snake_angry':
+                self.game.snake.is_angry = action[1]
             elif action[0] == 'fade_heart':
                 if progress and progress >= action[1]:
                     self.game.snake.emote = None
@@ -285,12 +292,18 @@ class BaseCutscene:
                         nest.has_eggs = False
             elif action[0] == 'snake_god_appear':
                 if action[1]:
-                    # Match fade-in speed with scene darkening
+                    # Fade in
                     self.sprites['snake_god'].fade_in(255 / self.fade_duration)
+                else:
+                    # Fade out
+                    self.sprites['snake_god'].fade_out(255 / self.fade_duration)
             elif action[0] == 'bird_god_appear':
                 if action[1]:
-                    # Match fade-in speed with scene darkening
+                    # Fade in
                     self.sprites['bird_god'].fade_in(255 / self.fade_duration)
+                else:
+                    # Fade out
+                    self.sprites['bird_god'].fade_out(255 / self.fade_duration)
     
     def resolve_position(self, position):
         """Convert position with variables into actual coordinates"""

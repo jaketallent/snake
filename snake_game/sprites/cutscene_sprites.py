@@ -69,6 +69,7 @@ class SnakeGod:
         self.y = y
         self.block_size = block_size
         self.alpha = 0
+        self.fade_speed = 0  # Add this to track fade direction/speed
     
     def draw(self, surface):
         if self.alpha <= 0:
@@ -108,10 +109,19 @@ class SnakeGod:
         surface.blit(god_surface, god_rect)
     
     def fade_in(self, amount=5):
-        self.alpha = min(255, self.alpha + amount)
+        self.fade_speed = abs(amount)  # Store positive fade speed
+        self.alpha = min(255, self.alpha + self.fade_speed)
     
     def fade_out(self, amount=5):
-        self.alpha = max(0, self.alpha - amount) 
+        self.fade_speed = -abs(amount)  # Store negative fade speed
+        self.alpha = max(0, self.alpha + self.fade_speed)
+
+    def update(self):
+        """Update fade transitions"""
+        if self.fade_speed > 0:
+            self.alpha = min(255, self.alpha + self.fade_speed)
+        elif self.fade_speed < 0:
+            self.alpha = max(0, self.alpha + self.fade_speed)
 
     def get_sprite_rect(self):
         """Return the rectangle that encompasses the sprite"""
@@ -133,6 +143,7 @@ class BirdGod:
         self.alpha = 0
         self.wing_angle = 0
         self.wing_speed = 0.05
+        self.fade_speed = 0  # Add this to track fade direction/speed
     
     def draw(self, surface):
         if self.alpha <= 0:
@@ -252,10 +263,19 @@ class BirdGod:
         surface.blit(god_surface, god_rect)
     
     def fade_in(self, amount=5):
-        self.alpha = min(255, self.alpha + amount)
+        self.fade_speed = abs(amount)  # Store positive fade speed
+        self.alpha = min(255, self.alpha + self.fade_speed)
     
     def fade_out(self, amount=5):
-        self.alpha = max(0, self.alpha - amount)
+        self.fade_speed = -abs(amount)  # Store negative fade speed
+        self.alpha = max(0, self.alpha + self.fade_speed)
+
+    def update(self):
+        """Update fade transitions"""
+        if self.fade_speed > 0:
+            self.alpha = min(255, self.alpha + self.fade_speed)
+        elif self.fade_speed < 0:
+            self.alpha = max(0, self.alpha + self.fade_speed)
 
     def get_sprite_rect(self):
         """Return the rectangle that encompasses the sprite"""

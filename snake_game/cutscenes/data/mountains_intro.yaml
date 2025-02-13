@@ -68,14 +68,14 @@ sequence:
     text: "Foul, feathered beast! You simply fear reprisal for what your child has done."
     focus: "snake_god"
 
-  - type: dialogue
-    text: "Your master deceives you. He cares not for your plight."
-    focus: "bird_god"
-
   - type: action
     duration: 30
     actions:
-    - ["snake_look_at", "bird_god"]
+      - ["snake_look_at", "bird_god"]
+
+  - type: dialogue
+    text: "Your master deceives you. He cares not for your plight."
+    focus: "bird_god"
 
   - type: dialogue
     text: "You are simply an instrument of his power."
@@ -90,6 +90,11 @@ sequence:
     text: "!!!"
     focus: "snake"
 
+  - type: action
+    duration: 30
+    actions:
+    - ["snake_look_at", "snake_god"]
+
   - type: dialogue
     text: "..."
     focus: "snake_god"
@@ -99,15 +104,16 @@ sequence:
     focus: "snake"
 
   - type: action
-    duration: 60
+    duration: 120  # Match the fade duration
     actions:
-    - [snake_god_appear, false]
-
-  - type: action
-    duration: 60
-    actions:
-    - [bird_god_appear, false]
+      - ["snake_angry", true]
+      - [snake_god_appear, false]
+      - [bird_god_appear, false]
 
   - type: dialogue
-    text: "I tire of this dickering. Only blood will pay for this."
+    text: "I tire of this dickering. I will smash every mountain, dry every river, to find and eat my foe!!!"
+    focus: "snake"
+
+  - type: dialogue
+    text: "Only blood will pay for this."
     focus: "snake"

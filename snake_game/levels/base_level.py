@@ -1149,6 +1149,7 @@ class BaseLevel:
         """Called when cutscene ends and gameplay begins"""
         # Reset snake state when gameplay starts
         self.game.snake.is_sleeping = False
+        self.game.snake.is_angry = False  # Reset angry state
         self.game.snake.emote = None
         self.game.snake.look_at(None)
         # Start appropriate music

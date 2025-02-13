@@ -34,6 +34,7 @@ class Snake:
         self.has_input_this_frame = False
         self.recent_inputs = []  # Track recent input timestamps
         self.input_buffer_frames = 8  # Increased from 5 to 8 frames
+        self.is_angry = False  # Add new state
         
     def reset(self, x, y):
         self.x = x
@@ -339,7 +340,7 @@ class Snake:
         right_eye_x = head[0] + 3 * self.block_size // 4
         right_eye_y = head[1] + self.block_size // 4
         
-        # Draw white part of eyes
+        # Draw white part of eyes (always round)
         pygame.draw.circle(surface, (255, 255, 255), (left_eye_x, left_eye_y), eye_radius)
         pygame.draw.circle(surface, (255, 255, 255), (right_eye_x, right_eye_y), eye_radius)
         
@@ -359,57 +360,102 @@ class Snake:
                     dx = self.look_at_point[0] - eye_x
                     dy = self.look_at_point[1] - eye_y
                     angle = math.atan2(dy, dx)
+                    
                     pupil_x = eye_x + math.cos(angle) * (eye_radius // 2)
                     pupil_y = eye_y + math.sin(angle) * (eye_radius // 2)
-                    pygame.draw.circle(surface, (0, 0, 0), (int(pupil_x), int(pupil_y)), pupil_radius)
+                    
+                    if self.is_angry:
+                        # Draw vertical slit pupil
+                        slit_width = max(2, eye_radius // 6)  # Make thinner
+                        slit_height = int(eye_radius * 1.8)  # Make taller
+                        
+                        # Create a surface for the slit with alpha
+                        slit_surface = pygame.Surface((slit_width, slit_height), pygame.SRCALPHA)
+                        
+                        # Draw the slit with a gradient
+                        for y in range(slit_height):
+                            alpha = 255 - abs(y - slit_height//2) * 255 // (slit_height//2)
+                            pygame.draw.line(slit_surface, (255, 0, 0, alpha), 
+                                          (0, y), (slit_width, y))
+                        
+                        # Position the slit (no rotation needed since we want vertical)
+                        slit_rect = slit_surface.get_rect(center=(pupil_x, pupil_y))
+                        surface.blit(slit_surface, slit_rect)
+                    else:
+                        # Normal round pupils
+                        pygame.draw.circle(surface, (0, 0, 0),
+                                        (int(pupil_x), int(pupil_y)),
+                                        pupil_radius)
             else:
                 # Normal movement-based pupils
                 pupil_offset_x = self.dx / self.block_size * (eye_radius // 2)
                 pupil_offset_y = self.dy / self.block_size * (eye_radius // 2)
                 
                 for eye_x, eye_y in [(left_eye_x, left_eye_y), (right_eye_x, right_eye_y)]:
-                    pygame.draw.circle(surface, (0, 0, 0),
-                                     (eye_x + pupil_offset_x, eye_y + pupil_offset_y),
-                                     pupil_radius)
-    
+                    if self.is_angry:
+                        # Draw vertical slit pupil
+                        slit_width = max(2, eye_radius // 6)  # Make thinner
+                        slit_height = int(eye_radius * 1.8)  # Make taller
+                        
+                        # Create a surface for the slit with alpha
+                        slit_surface = pygame.Surface((slit_width, slit_height), pygame.SRCALPHA)
+                        
+                        # Draw the slit with a gradient
+                        for y in range(slit_height):
+                            alpha = 255 - abs(y - slit_height//2) * 255 // (slit_height//2)
+                            pygame.draw.line(slit_surface, (255, 0, 0, alpha), 
+                                          (0, y), (slit_width, y))
+                        
+                        # Position the slit (no rotation needed)
+                        slit_rect = slit_surface.get_rect(
+                            center=(eye_x + pupil_offset_x, eye_y + pupil_offset_y))
+                        surface.blit(slit_surface, slit_rect)
+                    else:
+                        # Normal round pupils
+                        pygame.draw.circle(surface, (0, 0, 0),
+                                         (eye_x + pupil_offset_x,
+                                          eye_y + pupil_offset_y),
+                                         pupil_radius)
+
     def _draw_emote(self, surface, alpha=255):
-        if not self.emote or not self.body:
+        """Draw emote above snake's head"""
+        if not self.emote:
             return
-            
-        head = self.body[-1]
-        emote_y = head[1] - 25
-        emote_x = head[0] + self.block_size // 2
+        
+        # Position emote above snake's head
+        emote_x = self.x + self.block_size // 2
+        emote_y = self.y - 20
         
         if self.emote == 'heart':
-            # Draw simple 8-bit heart
-            color = (255, 0, 0)  # Bright red
-            pixel_size = 3
-            
-            # Heart pattern (1 = pixel, 0 = empty)
-            heart_pattern = [
-                [0,1,1,0,1,1,0],
-                [1,1,1,1,1,1,1],
-                [1,1,1,1,1,1,1],
-                [0,1,1,1,1,1,0],
-                [0,0,1,1,1,0,0],
-                [0,0,0,1,0,0,0],
+            # Existing heart drawing code...
+            points = [
+                (emote_x, emote_y + 5),
+                (emote_x - 5, emote_y),
+                (emote_x - 5, emote_y - 5),
+                (emote_x, emote_y - 10),
+                (emote_x + 5, emote_y - 5),
+                (emote_x + 5, emote_y),
             ]
-            
-            # Draw each pixel of the heart
-            for y, row in enumerate(heart_pattern):
-                for x, pixel in enumerate(row):
-                    if pixel:
-                        pygame.draw.rect(surface, color,
-                                       [emote_x - (len(row) * pixel_size // 2) + (x * pixel_size),
-                                        emote_y + (y * pixel_size),
-                                        pixel_size, pixel_size])
+            pygame.draw.polygon(surface, (255, 100, 100), points)
         
-        elif self.emote == 'exclamation':
-            # Draw exclamation mark
+        elif self.emote == '!!!':
+            # Existing exclamation mark drawing code...
             color = (255, 255, 255)
             pygame.draw.rect(surface, color, (emote_x - 2, emote_y - 12, 4, 8))
             pygame.draw.rect(surface, color, (emote_x - 2, emote_y - 2, 4, 4))
-    
+        
+        elif self.emote == 'angry':
+            # Draw angry eyebrows
+            color = (255, 100, 100)  # Red color for anger
+            # Left eyebrow (angled down towards center)
+            pygame.draw.line(surface, color, 
+                            (emote_x - 10, emote_y - 8),
+                            (emote_x - 4, emote_y - 4), 3)
+            # Right eyebrow (angled down towards center)
+            pygame.draw.line(surface, color,
+                            (emote_x + 10, emote_y - 8),
+                            (emote_x + 4, emote_y - 4), 3)
+
     def grow(self):
         """Increase the length of the snake"""
         self.length += 1 
