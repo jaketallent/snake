@@ -113,9 +113,10 @@ class BaseCutscene:
             overlay.fill((0, 0, 0, self.overlay_alpha))
             surface.blit(overlay, (0, 0))
         
-        # Add "ESC = Skip" text under level name
+        # Add "ESC = Skip" text - position based on whether it's a boss level
         skip_text = self.game.font.render("Esc = Skip", True, (128, 128, 128))  # Gray color
-        skip_rect = skip_text.get_rect(topleft=(10, 35))  # Position under level name
+        is_boss_level = self.game.current_level.level_data.get('is_boss', False)
+        skip_rect = skip_text.get_rect(topleft=(10, 10 if is_boss_level else 35))  # Adjust Y position if boss level
         surface.blit(skip_text, skip_rect)
         
         # Draw all sprites with appropriate alpha

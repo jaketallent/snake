@@ -108,6 +108,14 @@ MOUNTAIN_CRITTERS = [
     }
 ]
 
+# Add eagle data as a separate constant that can be referenced when needed
+EAGLE_CRITTER = {
+    'color': (139, 69, 19),  # Brown
+    'secondary_color': (101, 67, 33),  # Darker brown
+    'size': 20,
+    'type': 'eagle'
+}
+
 # Define time-of-day color schemes
 TIMES_OF_DAY = {
     'desert': {
@@ -409,7 +417,8 @@ LEVELS = [
             }
         ],
         'critters': MOUNTAIN_CRITTERS,  # These are now boulders and trees
-        'required_food': 8,
+        'required_food': 1,  # Change to 1 since we only need to eat the eagle
+        'has_target_mountain': True,  # Add this flag
         'play_area': {'top': 150, 'bottom': 600},
         'cutscenes': {
             'intro': 'mountains_intro'

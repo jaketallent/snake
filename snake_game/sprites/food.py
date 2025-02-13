@@ -8,12 +8,15 @@ class Food:
         self.y = y
         self.critter_data = critter_data
         self.block_size = block_size
+        self.is_eagle = critter_data['type'] == 'eagle'
     
     def draw(self, surface):
         block = self.block_size // 4
         
-        # Call the appropriate drawing method based on critter type
-        if self.critter_data['type'] == 'boulder':
+        # Add eagle to the type checks
+        if self.critter_data['type'] == 'eagle':
+            self._draw_eagle(surface, block)
+        elif self.critter_data['type'] == 'boulder':
             self._draw_boulder(surface, block)
         elif self.critter_data['type'] == 'pine':
             self._draw_pine(surface, block)
@@ -255,4 +258,43 @@ class Food:
                         [self.x, self.y, block * 3, block * 3])
         # Windows
         pygame.draw.rect(surface, self.critter_data['secondary_color'],
-                        [self.x, self.y + block, block * 2, block]) 
+                        [self.x, self.y + block, block * 2, block])
+
+    def _draw_eagle(self, surface, block):
+        """Draw an eagle (similar to cutscene eagle but simpler)"""
+        # Colors from critter data
+        body_color = self.critter_data['color']  # Brown
+        wing_color = self.critter_data['secondary_color']  # Darker brown
+        beak_color = (255, 215, 0)  # Gold color for beak
+        
+        # Body (slightly smaller to make room for talons)
+        pygame.draw.rect(surface, body_color,
+                        [self.x + block*2, self.y + block*2,
+                         block*4, block*3])
+        
+        # Wings
+        pygame.draw.rect(surface, wing_color,
+                        [self.x, self.y + block*2,
+                         block*2, block*3])  # Left wing
+        pygame.draw.rect(surface, wing_color,
+                        [self.x + block*6, self.y + block*2,
+                         block*2, block*3])  # Right wing
+        
+        # Head with beak
+        pygame.draw.rect(surface, body_color,
+                        [self.x + block*3, self.y + block,
+                         block*2, block])  # Head
+        pygame.draw.rect(surface, beak_color,
+                        [self.x + block*5, self.y + block,
+                         block, block])  # Beak
+        
+        # Talons with gap between feet
+        for i in range(3):
+            # Left foot talons
+            pygame.draw.rect(surface, beak_color,
+                            [self.x + block*(2 + i*0.75), self.y + block*5,
+                             block//2, block])
+            # Right foot talons
+            pygame.draw.rect(surface, beak_color,
+                            [self.x + block*(5 + i*0.75), self.y + block*5,
+                             block//2, block]) 

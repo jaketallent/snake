@@ -6,7 +6,7 @@ from sprites.obstacle import (Cactus, Tree, Bush, Pond, Building,
                             Park, Lake, Rubble, MountainPeak, MountainRidge, River)
 from sprites.snake import Snake
 from .sky_manager import SkyManager
-from .level_data import TIMES_OF_DAY
+from .level_data import TIMES_OF_DAY, EAGLE_CRITTER
 from cutscenes.base_cutscene import BaseCutscene
 from sprites.boss import TankBoss
 
@@ -65,7 +65,19 @@ class BaseLevel:
         self.building_positions = None
         self.park_positions = None
         
-        self.initialize_obstacles()
+        self.target_mountain = None
+        self.eagle_spawned = False
+        
+        if level_data.get('has_target_mountain', False):
+            self.initialize_obstacles()
+            # After obstacles are created, randomly select a mountain peak as target
+            mountain_peaks = [obs for obs in self.obstacles 
+                            if isinstance(obs, MountainPeak)]
+            if mountain_peaks:
+                self.target_mountain = random.choice(mountain_peaks)
+        else:
+            self.initialize_obstacles()
+        
         self.find_safe_spawn_for_snake(game.snake)
         self.spawn_food()
         
@@ -815,7 +827,12 @@ class BaseLevel:
                               self.block_size, self.block_size)
         
         if snake_rect.colliderect(food_rect):
-            self.food_count += 1
+            # Only increment food count if it's the eagle in mountain level
+            # or if it's not the mountain level
+            if (self.level_data.get('has_target_mountain', False) and 
+                self.food.is_eagle) or not self.level_data.get('has_target_mountain', False):
+                self.food_count += 1
+            
             snake.handle_food_eaten()
             self.spawn_food()
             return True
@@ -823,7 +840,10 @@ class BaseLevel:
         return False
     
     def is_complete(self):
-        if self.level_data.get('is_boss', False):
+        if self.level_data.get('has_target_mountain', False):
+            # Mountain level is complete when the eagle is eaten
+            return self.food_count >= self.required_food and self.eagle_spawned
+        elif self.level_data.get('is_boss', False):
             # Only consider complete if boss health is 0 AND death animation is finished
             if self.boss_health <= 0:
                 # If boss exists and is dying, wait for animation
@@ -1033,15 +1053,17 @@ class BaseLevel:
         for obs in self.obstacles[:]:  # iterate over a copy, so we can remove
             if obs.update_destruction():
                 if obs.is_being_destroyed and obs.can_be_destroyed:
-                    # If it's a mountain peak, start drying connected rivers
-                    if isinstance(obs, MountainPeak):
-                        # Find and start drying all rivers connected to this mountain
-                        for river in [r for r in self.obstacles if isinstance(r, River)]:
-                            if river.source_mountain == obs:
-                                river.start_drying()
+                    # If this is the target mountain, spawn the eagle
+                    if obs == self.target_mountain and not self.eagle_spawned:
+                        self.eagle_spawned = True
+                        self.food = Food(obs.x + obs.width//2, 
+                                       obs.y + obs.height//2,
+                                       EAGLE_CRITTER,
+                                       self.block_size)
                     
-                    # If it's a building in the city, spawn rubble
+                    # If it's a building in the city, spawn rubble and increment counter
                     if isinstance(obs, Building) and self.level_data['biome'] == 'city':
+                        self.buildings_destroyed += 1
                         # Create rubble with same dimensions as building
                         new_rubble = Rubble(
                             obs.x,
@@ -1205,3 +1227,12 @@ class BaseLevel:
                 return False
             return rect.colliderect(h_rect)
         return False 
+
+    def draw_ui(self, surface):
+        # Modify the UI text based on level type
+        if self.level_data.get('has_target_mountain', False):
+            count_text = f"Eagle: {self.food_count}/{self.required_food}"
+        else:
+            count_text = f"Food: {self.food_count}/{self.required_food}"
+        
+        # Rest of UI drawing code... 
