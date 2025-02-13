@@ -6,6 +6,7 @@ class Snake:
     def __init__(self, x, y, game=None, block_size=20):
         self.block_size = block_size
         self.game = game  # Store reference to game
+        self.alpha = 255  # Add alpha attribute for darkening support
         self.reset(x, y)
         self.is_dead = False
         self.death_timer = 0
@@ -227,21 +228,30 @@ class Snake:
             if self.is_powered_up:
                 self._draw_power_up_effect(surface)
             
+            # Modified: support alpha for darkening (set via cutscene)
+            snake_alpha = getattr(self, 'alpha', 255)
+            
             # Draw snake body segments with pixel-art style
             for segment in self.body:
-                # Draw each segment as 4x4 pixel blocks for retro look
                 block = self.block_size // 4
                 for i in range(4):
                     for j in range(4):
-                        # Create shading pattern: darker on bottom/right edges
+                        # Create shading: use flash color if flashing; otherwise use standard colors
                         if self.is_flashing:
                             color = self.flash_color
                         else:
                             color = (0, 200, 0) if (i == 3 or j == 3) else (0, 255, 0)
-                        pygame.draw.rect(surface, color,
-                                       [segment[0] + (j * block),
-                                        segment[1] + (i * block),
-                                        block, block])
+                        if snake_alpha < 255:
+                            # Create a temporary surface that supports per-pixel alpha
+                            temp_surf = pygame.Surface((block, block), pygame.SRCALPHA)
+                            temp_color = (color[0], color[1], color[2], snake_alpha)
+                            temp_surf.fill(temp_color)
+                            surface.blit(temp_surf, (segment[0] + (j * block), segment[1] + (i * block)))
+                        else:
+                            pygame.draw.rect(surface, color,
+                                             [segment[0] + (j * block),
+                                              segment[1] + (i * block),
+                                              block, block])
             
             # Update flash effect
             if self.is_flashing:
@@ -251,23 +261,24 @@ class Snake:
             
             # Draw eyes
             if self.body:
-                self._draw_eyes(surface)
+                self._draw_eyes(surface, snake_alpha)
             
             # Draw emote (if any) before Zzz animation
             if self.emote:
-                self._draw_emote(surface)
+                self._draw_emote(surface, snake_alpha)
             
             # Draw Zzz animation if sleeping
             if self.is_sleeping:
                 self.zzz_timer += 1
                 if self.zzz_timer % 60 < 30:  # Animate every half second
-                    zzz_color = (255, 255, 255)
+                    zzz_color = (255, 255, 255, snake_alpha)
                     for i in range(3):
                         x = self.x + 30 + (i * 10)
                         y = self.y - 20 - (i * 10)
                         size = 5 + (i * 2)
-                        pygame.draw.rect(surface, zzz_color,
-                                       [x, y, size, size])
+                        temp_surf = pygame.Surface((size, size), pygame.SRCALPHA)
+                        temp_surf.fill(zzz_color)
+                        surface.blit(temp_surf, (x, y))
             
             # Draw projectiles with enhanced electric effect
             for proj in self.projectiles[:]:
@@ -314,7 +325,7 @@ class Snake:
                 pygame.draw.circle(surface, (0, 255, 0),
                                  (int(proj['x']), int(proj['y'])), int(core_size - 1))
 
-    def _draw_eyes(self, surface):
+    def _draw_eyes(self, surface, alpha=255):
         if not self.body:  # Safety check
             return
             
@@ -361,7 +372,7 @@ class Snake:
                                      (eye_x + pupil_offset_x, eye_y + pupil_offset_y),
                                      pupil_radius)
     
-    def _draw_emote(self, surface):
+    def _draw_emote(self, surface, alpha=255):
         if not self.emote or not self.body:
             return
             
