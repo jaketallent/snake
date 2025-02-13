@@ -81,6 +81,7 @@ class BaseLevel:
         self.find_safe_spawn_for_snake(game.snake)
         self.spawn_food()
         
+        self.ending_cutscene_played = False
         self.current_cutscene = None
         self.cutscenes = level_data.get('cutscenes', {})
         self.show_intro = 'intro' in self.cutscenes
@@ -841,8 +842,15 @@ class BaseLevel:
     
     def is_complete(self):
         if self.level_data.get('has_target_mountain', False):
-            # Mountain level is complete when the eagle is eaten
-            return self.food_count >= self.required_food and self.eagle_spawned
+            # Mountain level is complete when the eagle is eaten AND ending cutscene is done
+            if self.food_count >= self.required_food and self.eagle_spawned:
+                if not self.ending_cutscene_played and not self.current_cutscene:
+                    # Trigger ending cutscene if it hasn't been played yet
+                    self.trigger_cutscene('ending')
+                    self.ending_cutscene_played = True
+                    return False
+                # Only return True (allowing level advance) if cutscene is done
+                return not self.current_cutscene and self.ending_cutscene_played
         elif self.level_data.get('is_boss', False):
             # Only consider complete if boss health is 0 AND death animation is finished
             if self.boss_health <= 0:
@@ -869,26 +877,30 @@ class BaseLevel:
 
             # 2) Sort mountains/buildings by y-position for proper z-ordering
             buildings_and_mountains = [o for o in self.obstacles if isinstance(o, (Building, MountainPeak))]
-            buildings_and_mountains.sort(key=lambda x: x.y)  # Simpler sort by y only
+            buildings_and_mountains.sort(key=lambda x: x.y)
 
-            # 3) Draw each building/mountain completely (bases first, then tops)
-            # First draw all bases
+            # 3) Draw each building/mountain
             for obs in buildings_and_mountains:
                 if isinstance(obs, MountainPeak):
-                    obs.draw_base(surface)
+                    if obs.is_being_destroyed:
+                        # Let the mountain handle its own destruction animation
+                        obs.draw(surface)
+                    else:
+                        # Normal drawing - base first, then we'll do tops later
+                        obs.draw_base(surface)
                 else:
                     obs.draw(surface)  # Buildings draw normally
 
-            # Then draw all mountain tops
+            # 4) Draw all mountain tops (only for mountains not being destroyed)
             for obs in buildings_and_mountains:
-                if isinstance(obs, MountainPeak):
+                if isinstance(obs, MountainPeak) and not obs.is_being_destroyed:
                     obs.draw_top(surface)
             
-            # 4) Draw food
+            # 5) Draw food
             if self.food:
                 self.food.draw(surface)
                 
-            # 5) Draw snake
+            # 6) Draw snake
             self.game.snake.draw(surface)
         else:
             # Original logic for other biomes

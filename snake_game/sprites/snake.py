@@ -427,16 +427,24 @@ class Snake:
         emote_y = self.y - 20
         
         if self.emote == 'heart':
-            # Existing heart drawing code...
-            points = [
-                (emote_x, emote_y + 5),
-                (emote_x - 5, emote_y),
-                (emote_x - 5, emote_y - 5),
-                (emote_x, emote_y - 10),
-                (emote_x + 5, emote_y - 5),
-                (emote_x + 5, emote_y),
+            # Draw 8-bit style heart
+            pixel_size = 2
+            heart_pixels = [
+                [0,1,1,0,1,1,0],
+                [1,1,1,1,1,1,1],
+                [1,1,1,1,1,1,1],
+                [0,1,1,1,1,1,0],
+                [0,0,1,1,1,0,0],
+                [0,0,0,1,0,0,0],
             ]
-            pygame.draw.polygon(surface, (255, 100, 100), points)
+            
+            for y, row in enumerate(heart_pixels):
+                for x, pixel in enumerate(row):
+                    if pixel:
+                        pygame.draw.rect(surface, (255, 100, 100),
+                                       (emote_x - 7 + x * pixel_size,
+                                        emote_y - 6 + y * pixel_size,
+                                        pixel_size, pixel_size))
         
         elif self.emote == '!!!':
             # Existing exclamation mark drawing code...

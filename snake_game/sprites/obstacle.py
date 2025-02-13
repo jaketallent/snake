@@ -1386,15 +1386,17 @@ class MountainPeak(Obstacle):
         self.base_height = self.height * 0.3  # Bottom 30% is collidable
 
     def draw(self, surface, offset=None):
-        """Draw the entire mountain, with base behind and top in front."""
+        """Draw the entire mountain, handling both normal and destruction states."""
         if offset is None:
             offset = (self.x, self.y)
         
-        # Draw base first (behind everything)
-        if not self.is_destroyed:
+        if self.is_being_destroyed:
+            # Get pixels and draw destruction effect
+            pixels = self.get_destruction_pixels()
+            self.draw_destruction_effect(surface, pixels)
+        else:
+            # Normal drawing - base first, then top
             self.draw_base(surface, offset)
-            
-            # Then draw the non-collidable top portion
             self.draw_top(surface, offset)
 
     def draw_top(self, surface, offset=None):

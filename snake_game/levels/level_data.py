@@ -416,12 +416,13 @@ LEVELS = [
                 'max_size': 4
             }
         ],
-        'critters': MOUNTAIN_CRITTERS,  # These are now boulders and trees
-        'required_food': 1,  # Change to 1 since we only need to eat the eagle
-        'has_target_mountain': True,  # Add this flag
+        'critters': MOUNTAIN_CRITTERS,
+        'required_food': 1,
+        'has_target_mountain': True,
         'play_area': {'top': 150, 'bottom': 600},
         'cutscenes': {
-            'intro': 'mountains_intro'
+            'intro': 'mountains_intro',
+            'ending': 'mountains_ending'
         }
     }
 ] 
