@@ -108,6 +108,11 @@ class BaseCutscene:
             overlay.fill((0, 0, 0, self.overlay_alpha))
             surface.blit(overlay, (0, 0))
         
+        # Add "ESC = Skip" text under level name
+        skip_text = self.game.font.render("ESC = Skip", True, (128, 128, 128))  # Gray color
+        skip_rect = skip_text.get_rect(topleft=(10, 35))  # Position under level name
+        surface.blit(skip_text, skip_rect)
+        
         # Draw all sprites with appropriate alpha
         for name, sprite in self.sprites.items():
             # Store original alpha
@@ -153,17 +158,6 @@ class BaseCutscene:
         # Draw dialogue last
         if self.dialogue_text:
             self._draw_dialogue(surface)
-        
-        # Add "Press ESC to skip" text in top-right corner
-        skip_text = self.game.font.render("ESC to skip", True, (255, 255, 255))
-        skip_rect = skip_text.get_rect(topright=(surface.get_width() - 10, 10))
-        
-        # Draw semi-transparent background for better visibility
-        bg_rect = skip_rect.inflate(10, 6)
-        bg_surface = pygame.Surface(bg_rect.size, pygame.SRCALPHA)
-        pygame.draw.rect(bg_surface, (0, 0, 0, 128), bg_surface.get_rect())
-        surface.blit(bg_surface, bg_rect)
-        surface.blit(skip_text, skip_rect)
     
     def show_dialogue(self, text):
         self.dialogue_text = text
