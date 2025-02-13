@@ -1385,19 +1385,17 @@ class MountainPeak(Obstacle):
         # Define base height (collidable portion)
         self.base_height = self.height * 0.3  # Bottom 30% is collidable
 
-    def draw(self, surface):
-        """Full draw method now just combines top and base"""
-        if self.is_being_destroyed:
-            # Create a surface to sample pixels from for standard destruction effect
-            temp_surface = pygame.Surface((self.width + 2, self.height + 2), pygame.SRCALPHA)
-            self.draw_top(temp_surface)
-            self.draw_base(temp_surface)
-            # Use the shaped pixels from get_destruction_pixels
-            pixels = self.get_destruction_pixels()
-            self.draw_destruction_effect(surface, pixels)
-        else:
-            self.draw_top(surface)
-            self.draw_base(surface)
+    def draw(self, surface, offset=None):
+        """Draw the entire mountain, with base behind and top in front."""
+        if offset is None:
+            offset = (self.x, self.y)
+        
+        # Draw base first (behind everything)
+        if not self.is_destroyed:
+            self.draw_base(surface, offset)
+            
+            # Then draw the non-collidable top portion
+            self.draw_top(surface, offset)
 
     def draw_top(self, surface, offset=None):
         """Draw the non-collidable upper portion of the mountain.
