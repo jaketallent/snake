@@ -879,29 +879,31 @@ class BaseLevel:
             buildings_and_mountains = [o for o in self.obstacles if isinstance(o, (Building, MountainPeak))]
             buildings_and_mountains.sort(key=lambda x: x.y)
 
-            # 3) Draw each building/mountain
+            # 3) Draw all bases first
             for obs in buildings_and_mountains:
                 if isinstance(obs, MountainPeak):
                     if obs.is_being_destroyed:
                         # Let the mountain handle its own destruction animation
                         obs.draw(surface)
                     else:
-                        # Normal drawing - base first, then we'll do tops later
                         obs.draw_base(surface)
                 else:
-                    obs.draw(surface)  # Buildings draw normally
-
-            # 4) Draw all mountain tops (only for mountains not being destroyed)
-            for obs in buildings_and_mountains:
-                if isinstance(obs, MountainPeak) and not obs.is_being_destroyed:
-                    obs.draw_top(surface)
+                    obs.draw_base(surface)  # Draw building base
             
-            # 5) Draw food
+            # 4) Draw food
             if self.food:
                 self.food.draw(surface)
                 
-            # 6) Draw snake
+            # 5) Draw snake
             self.game.snake.draw(surface)
+            
+            # 6) Draw all tops last (so they appear over the snake)
+            for obs in buildings_and_mountains:
+                if not obs.is_being_destroyed:  # Skip if being destroyed
+                    if isinstance(obs, MountainPeak):
+                        obs.draw_top(surface)
+                    else:
+                        obs.draw_top(surface)  # Draw building top
         else:
             # Original logic for other biomes
             for obstacle in self.obstacles:
