@@ -602,6 +602,13 @@ class BaseLevel:
         return False
     
     def check_collision(self, snake):
+        # Don't check collisions if snake is frozen (e.g. during cutscene)
+        if getattr(snake, 'frozen', False):
+            return False
+        
+        # Get updated position
+        new_x, new_y = snake.update()
+        
         # Skip collision checks if boss is dying
         if (self.level_data.get('is_boss', False) and 
             self.boss and hasattr(self.boss, 'is_dying') and 
@@ -1077,6 +1084,12 @@ class BaseLevel:
                                        EAGLE_CRITTER,
                                        self.block_size)
                     
+                    # If it's a mountain, dry up any rivers sourced from it
+                    if isinstance(obs, MountainPeak):
+                        for river in self.obstacles:
+                            if isinstance(river, River) and river.source_mountain == obs:
+                                river.start_drying()
+                    
                     # If it's a building in the city, spawn rubble and increment counter
                     if isinstance(obs, Building) and self.level_data['biome'] == 'city':
                         self.buildings_destroyed += 1
@@ -1200,6 +1213,9 @@ class BaseLevel:
         if trigger_id in self.cutscenes:
             cutscene_id = self.cutscenes[trigger_id]
             self.game.music_manager.stop_music()
+            # If this is the ending cutscene on a mountain level, freeze the snake
+            if trigger_id == 'ending' and self.level_data.get('has_target_mountain', False):
+                self.game.snake.frozen = True  # This will prevent the snake from updating its position
             self.current_cutscene = BaseCutscene(self.game, cutscene_id)
 
     def _collides_with_no_spawn(self, x, y):

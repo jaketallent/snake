@@ -35,6 +35,7 @@ class Snake:
         self.recent_inputs = []  # Track recent input timestamps
         self.input_buffer_frames = 8  # Increased from 5 to 8 frames
         self.is_angry = False  # Add new state
+        self.frozen = False  # Add frozen attribute
         
     def reset(self, x, y):
         self.x = x
@@ -54,6 +55,7 @@ class Snake:
         self.flash_timer = 0
         self.is_flashing = False
         self.power_up_timer = 0
+        self.frozen = False  # Unfreeze when resetting the snake
         
     def is_movement_frozen(self):
         """Check if snake movement should be frozen (e.g. during boss death)"""
@@ -102,8 +104,8 @@ class Snake:
                 self.spit_venom()
     
     def update(self):
-        # If movement is frozen, return current position without updating
-        if self.is_movement_frozen():
+        # If the snake is frozen (e.g. during cutscene), return its current position
+        if getattr(self, 'frozen', False):
             return self.x, self.y
             
         # Clear old inputs from buffer
