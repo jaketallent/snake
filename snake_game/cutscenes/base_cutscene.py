@@ -75,6 +75,10 @@ class BaseCutscene:
             if hasattr(sprite, 'update'):
                 sprite.update()
         
+        # Update snake if it's ascending
+        if self.game.snake.is_ascending:
+            self.game.snake.update()
+        
         # Smoothly adjust scene darkening when any god is present
         if any(hasattr(sprite, 'alpha') and sprite.alpha > 0 for sprite in self.sprites.values()):
             self.overlay_alpha = min(self.target_alpha, self.overlay_alpha + self.transition_speed)
@@ -240,13 +244,22 @@ class BaseCutscene:
             return not self.waiting_for_input
             
         elif sequence['type'] == 'action':
-            progress = min(1.0, self.sequence_time / sequence['duration'])
-            if 'actions' in sequence:
-                self.perform_actions(sequence['actions'], progress)
-            # Allow focus changes in action sequences too
-            if 'focus' in sequence:
-                self.current_focus = sequence['focus']
-            return progress >= 1.0
+            if 'duration' in sequence:
+                # Normal timed actions
+                progress = min(1.0, self.sequence_time / sequence['duration'])
+                if 'actions' in sequence:
+                    self.perform_actions(sequence['actions'], progress)
+                if 'focus' in sequence:
+                    self.current_focus = sequence['focus']
+                return progress >= 1.0
+            else:
+                # Special actions that run until complete
+                if 'actions' in sequence:
+                    self.perform_actions(sequence['actions'])
+                    # Check if special action is complete
+                    if any(action[0] == 'snake_ascend' for action in sequence['actions']):
+                        return self.game.snake.y < -100  # End sooner
+                return False
     
     def perform_actions(self, actions, progress=None):
         for action in actions:
@@ -305,6 +318,9 @@ class BaseCutscene:
                 else:
                     # Fade out
                     self.sprites['bird_god'].fade_out(255 / self.fade_duration)
+            elif action[0] == 'snake_ascend':
+                if not self.game.snake.is_ascending:  # Only start if not already ascending
+                    self.game.snake.start_ascension()
     
     def resolve_position(self, position):
         """Convert position with variables into actual coordinates"""

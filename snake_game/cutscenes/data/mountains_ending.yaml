@@ -71,6 +71,13 @@ sequence:
   - type: action
     duration: 60
     actions:
-      - ["snake_angry", false]
       - ["stop_looking", true]
+
+  - type: action  # New action without duration
+    actions:
+      - ["snake_ascend", true]
+
+  - type: action
+    duration: 120  # Increased from 60 to 120 frames
+    actions:
       - ["end_cutscene", true] 

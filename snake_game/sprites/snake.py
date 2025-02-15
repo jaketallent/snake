@@ -36,6 +36,10 @@ class Snake:
         self.input_buffer_frames = 8  # Increased from 5 to 8 frames
         self.is_angry = False  # Add new state
         self.frozen = False  # Add frozen attribute
+        self.is_ascending = False
+        self.ascension_timer = 0
+        self.ascension_shake_intensity = 0
+        self.original_y = 0  # Store original y position for ascension
         
     def reset(self, x, y):
         self.x = x
@@ -59,6 +63,10 @@ class Snake:
         
     def is_movement_frozen(self):
         """Check if snake movement should be frozen (e.g. during boss death)"""
+        # Don't freeze movement during ascension
+        if self.is_ascending:
+            return False
+            
         # Check if we're in a boss level and boss is dying
         if (self.game.current_level.level_data.get('is_boss', False) and 
             self.game.current_level.boss and 
@@ -104,6 +112,39 @@ class Snake:
                 self.spit_venom()
     
     def update(self):
+        if self.is_ascending:
+            self.ascension_timer += 1
+            old_x, old_y = self.x, self.y
+            
+            if self.ascension_timer < 60:  # First second: build up shaking
+                self.ascension_shake_intensity = self.ascension_timer / 15
+                shake_offset = random.randint(-int(self.ascension_shake_intensity * 5), 
+                                           int(self.ascension_shake_intensity * 5))
+                self.x += shake_offset
+                
+            elif self.ascension_timer == 60:  # At 1 second: start rising
+                self.dy = -15  # Initial upward speed
+                
+            elif self.ascension_timer > 60:  # After 1 second: accelerate upward
+                self.dy *= 1.1  # Gentler acceleration
+                new_y = self.y + self.dy
+                # Clamp the position to prevent overflow
+                self.y = max(-1000, new_y)  # Don't let y go below -1000
+                
+                # Add slight horizontal wobble during ascent
+                self.x += math.sin(self.ascension_timer * 0.2) * 5
+                # Keep x within screen bounds
+                self.x = max(-100, min(self.game.width + 100, self.x))
+
+            # Update all body segments to follow the head's movement
+            dx = self.x - old_x
+            dy = self.y - old_y
+            for segment in self.body:
+                segment[0] += dx
+                segment[1] += dy
+            
+            return
+
         # If the snake is frozen (e.g. during cutscene), return its current position
         if getattr(self, 'frozen', False):
             return self.x, self.y
@@ -596,3 +637,10 @@ class Snake:
             # Start cooldown
             self.can_spit = False
             self.spit_cooldown = 0 
+
+    def start_ascension(self):
+        """Start the ascension animation"""
+        self.is_ascending = True
+        self.ascension_timer = 0
+        self.original_y = self.y
+        self.ascension_shake_intensity = 0 

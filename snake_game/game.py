@@ -305,6 +305,11 @@ class Game:
             self.window.blit(text_surface, text_rect)
 
     def draw_ui(self):
+        """Draw UI elements like score, food streak, etc."""
+        # Don't draw UI if snake is ascending (end of game)
+        if self.snake.is_ascending:
+            return
+            
         # Use the initialized font
         font = self.font
         
