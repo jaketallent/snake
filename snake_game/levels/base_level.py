@@ -317,23 +317,22 @@ class BaseLevel:
                     mountain_center_x = mountain_base.centerx
                     screen_center_x = self.game.width // 2
                     
-                    # Calculate start position to ensure river starts under the mountain
                     if mountain_center_x < screen_center_x:
-                        start_x = mountain_base.centerx + random.randint(0, mountain_base.width//4)
+                        start_x = mountain_base.centerx + random.randint(0, mountain_base.width // 4)
                         direction = 1  # Flow right
                     else:
-                        start_x = mountain_base.centerx - random.randint(0, mountain_base.width//4)
+                        start_x = mountain_base.centerx - random.randint(0, mountain_base.width // 4)
                         direction = -1  # Flow left
                     
-                    start_y = mountain_base.bottom - 5  # Start slightly higher
+                    start_y = mountain_base.bottom      # Start right at the bottom
                     
                     variations = {
-                        'width': random.randint(min_size, max_size) * 4,  # Make rivers even narrower
+                        'width': random.randint(min_size, max_size) * 4,
                         'length': random.randint(200, 300),
                         'direction': direction
                     }
                     new_obstacle = River(start_x, start_y, variations, self.block_size)
-                    new_obstacle.source_mountain = source_mountain  # NEW: Store reference to source mountain
+                    new_obstacle.source_mountain = source_mountain  # Store reference to the source mountain
                     new_obstacle.game = self.game  # Ensure game reference is set
                     
                     # Check if the river would go off-screen or too close to other rivers
