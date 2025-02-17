@@ -22,6 +22,7 @@ sequence:
 
   - type: dialogue
     text: "You have laid waste to the city, my child."
+    focus: "snake_god"
 
   - type: dialogue
     text: "But something stirs in the ruins..."

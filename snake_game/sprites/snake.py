@@ -6,6 +6,7 @@ class Snake:
     def __init__(self, x, y, game=None, block_size=20):
         self.block_size = block_size
         self.game = game  # Store reference to game
+        self.alpha = 255  # Add alpha attribute for darkening support
         self.reset(x, y)
         self.is_dead = False
         self.death_timer = 0
@@ -33,6 +34,12 @@ class Snake:
         self.has_input_this_frame = False
         self.recent_inputs = []  # Track recent input timestamps
         self.input_buffer_frames = 8  # Increased from 5 to 8 frames
+        self.is_angry = False  # Add new state
+        self.frozen = False  # Add frozen attribute
+        self.is_ascending = False
+        self.ascension_timer = 0
+        self.ascension_shake_intensity = 0
+        self.original_y = 0  # Store original y position for ascension
         
     def reset(self, x, y):
         self.x = x
@@ -52,9 +59,14 @@ class Snake:
         self.flash_timer = 0
         self.is_flashing = False
         self.power_up_timer = 0
+        self.frozen = False  # Unfreeze when resetting the snake
         
     def is_movement_frozen(self):
         """Check if snake movement should be frozen (e.g. during boss death)"""
+        # Don't freeze movement during ascension
+        if self.is_ascending:
+            return False
+            
         # Check if we're in a boss level and boss is dying
         if (self.game.current_level.level_data.get('is_boss', False) and 
             self.game.current_level.boss and 
@@ -100,8 +112,41 @@ class Snake:
                 self.spit_venom()
     
     def update(self):
-        # If movement is frozen, return current position without updating
-        if self.is_movement_frozen():
+        if self.is_ascending:
+            self.ascension_timer += 1
+            old_x, old_y = self.x, self.y
+            
+            if self.ascension_timer < 60:  # First second: build up shaking
+                self.ascension_shake_intensity = self.ascension_timer / 15
+                shake_offset = random.randint(-int(self.ascension_shake_intensity * 5), 
+                                           int(self.ascension_shake_intensity * 5))
+                self.x += shake_offset
+                
+            elif self.ascension_timer == 60:  # At 1 second: start rising
+                self.dy = -15  # Initial upward speed
+                
+            elif self.ascension_timer > 60:  # After 1 second: accelerate upward
+                self.dy *= 1.1  # Gentler acceleration
+                new_y = self.y + self.dy
+                # Clamp the position to prevent overflow
+                self.y = max(-1000, new_y)  # Don't let y go below -1000
+                
+                # Add slight horizontal wobble during ascent
+                self.x += math.sin(self.ascension_timer * 0.2) * 5
+                # Keep x within screen bounds
+                self.x = max(-100, min(self.game.width + 100, self.x))
+
+            # Update all body segments to follow the head's movement
+            dx = self.x - old_x
+            dy = self.y - old_y
+            for segment in self.body:
+                segment[0] += dx
+                segment[1] += dy
+            
+            return
+
+        # If the snake is frozen (e.g. during cutscene), return its current position
+        if getattr(self, 'frozen', False):
             return self.x, self.y
             
         # Clear old inputs from buffer
@@ -227,21 +272,30 @@ class Snake:
             if self.is_powered_up:
                 self._draw_power_up_effect(surface)
             
+            # Modified: support alpha for darkening (set via cutscene)
+            snake_alpha = getattr(self, 'alpha', 255)
+            
             # Draw snake body segments with pixel-art style
             for segment in self.body:
-                # Draw each segment as 4x4 pixel blocks for retro look
                 block = self.block_size // 4
                 for i in range(4):
                     for j in range(4):
-                        # Create shading pattern: darker on bottom/right edges
+                        # Create shading: use flash color if flashing; otherwise use standard colors
                         if self.is_flashing:
                             color = self.flash_color
                         else:
                             color = (0, 200, 0) if (i == 3 or j == 3) else (0, 255, 0)
-                        pygame.draw.rect(surface, color,
-                                       [segment[0] + (j * block),
-                                        segment[1] + (i * block),
-                                        block, block])
+                        if snake_alpha < 255:
+                            # Create a temporary surface that supports per-pixel alpha
+                            temp_surf = pygame.Surface((block, block), pygame.SRCALPHA)
+                            temp_color = (color[0], color[1], color[2], snake_alpha)
+                            temp_surf.fill(temp_color)
+                            surface.blit(temp_surf, (segment[0] + (j * block), segment[1] + (i * block)))
+                        else:
+                            pygame.draw.rect(surface, color,
+                                             [segment[0] + (j * block),
+                                              segment[1] + (i * block),
+                                              block, block])
             
             # Update flash effect
             if self.is_flashing:
@@ -251,23 +305,24 @@ class Snake:
             
             # Draw eyes
             if self.body:
-                self._draw_eyes(surface)
+                self._draw_eyes(surface, snake_alpha)
             
             # Draw emote (if any) before Zzz animation
             if self.emote:
-                self._draw_emote(surface)
+                self._draw_emote(surface, snake_alpha)
             
             # Draw Zzz animation if sleeping
             if self.is_sleeping:
                 self.zzz_timer += 1
                 if self.zzz_timer % 60 < 30:  # Animate every half second
-                    zzz_color = (255, 255, 255)
+                    zzz_color = (255, 255, 255, snake_alpha)
                     for i in range(3):
                         x = self.x + 30 + (i * 10)
                         y = self.y - 20 - (i * 10)
                         size = 5 + (i * 2)
-                        pygame.draw.rect(surface, zzz_color,
-                                       [x, y, size, size])
+                        temp_surf = pygame.Surface((size, size), pygame.SRCALPHA)
+                        temp_surf.fill(zzz_color)
+                        surface.blit(temp_surf, (x, y))
             
             # Draw projectiles with enhanced electric effect
             for proj in self.projectiles[:]:
@@ -314,7 +369,7 @@ class Snake:
                 pygame.draw.circle(surface, (0, 255, 0),
                                  (int(proj['x']), int(proj['y'])), int(core_size - 1))
 
-    def _draw_eyes(self, surface):
+    def _draw_eyes(self, surface, alpha=255):
         if not self.body:  # Safety check
             return
             
@@ -328,7 +383,7 @@ class Snake:
         right_eye_x = head[0] + 3 * self.block_size // 4
         right_eye_y = head[1] + self.block_size // 4
         
-        # Draw white part of eyes
+        # Draw white part of eyes (always round)
         pygame.draw.circle(surface, (255, 255, 255), (left_eye_x, left_eye_y), eye_radius)
         pygame.draw.circle(surface, (255, 255, 255), (right_eye_x, right_eye_y), eye_radius)
         
@@ -348,34 +403,76 @@ class Snake:
                     dx = self.look_at_point[0] - eye_x
                     dy = self.look_at_point[1] - eye_y
                     angle = math.atan2(dy, dx)
+                    
                     pupil_x = eye_x + math.cos(angle) * (eye_radius // 2)
                     pupil_y = eye_y + math.sin(angle) * (eye_radius // 2)
-                    pygame.draw.circle(surface, (0, 0, 0), (int(pupil_x), int(pupil_y)), pupil_radius)
+                    
+                    if self.is_angry:
+                        # Draw vertical slit pupil
+                        slit_width = max(2, eye_radius // 6)  # Make thinner
+                        slit_height = int(eye_radius * 1.8)  # Make taller
+                        
+                        # Create a surface for the slit with alpha
+                        slit_surface = pygame.Surface((slit_width, slit_height), pygame.SRCALPHA)
+                        
+                        # Draw the slit with a gradient
+                        for y in range(slit_height):
+                            alpha = 255 - abs(y - slit_height//2) * 255 // (slit_height//2)
+                            pygame.draw.line(slit_surface, (255, 0, 0, alpha), 
+                                          (0, y), (slit_width, y))
+                        
+                        # Position the slit (no rotation needed since we want vertical)
+                        slit_rect = slit_surface.get_rect(center=(pupil_x, pupil_y))
+                        surface.blit(slit_surface, slit_rect)
+                    else:
+                        # Normal round pupils
+                        pygame.draw.circle(surface, (0, 0, 0),
+                                        (int(pupil_x), int(pupil_y)),
+                                        pupil_radius)
             else:
                 # Normal movement-based pupils
                 pupil_offset_x = self.dx / self.block_size * (eye_radius // 2)
                 pupil_offset_y = self.dy / self.block_size * (eye_radius // 2)
                 
                 for eye_x, eye_y in [(left_eye_x, left_eye_y), (right_eye_x, right_eye_y)]:
-                    pygame.draw.circle(surface, (0, 0, 0),
-                                     (eye_x + pupil_offset_x, eye_y + pupil_offset_y),
-                                     pupil_radius)
-    
-    def _draw_emote(self, surface):
-        if not self.emote or not self.body:
+                    if self.is_angry:
+                        # Draw vertical slit pupil
+                        slit_width = max(2, eye_radius // 6)  # Make thinner
+                        slit_height = int(eye_radius * 1.8)  # Make taller
+                        
+                        # Create a surface for the slit with alpha
+                        slit_surface = pygame.Surface((slit_width, slit_height), pygame.SRCALPHA)
+                        
+                        # Draw the slit with a gradient
+                        for y in range(slit_height):
+                            alpha = 255 - abs(y - slit_height//2) * 255 // (slit_height//2)
+                            pygame.draw.line(slit_surface, (255, 0, 0, alpha), 
+                                          (0, y), (slit_width, y))
+                        
+                        # Position the slit (no rotation needed)
+                        slit_rect = slit_surface.get_rect(
+                            center=(eye_x + pupil_offset_x, eye_y + pupil_offset_y))
+                        surface.blit(slit_surface, slit_rect)
+                    else:
+                        # Normal round pupils
+                        pygame.draw.circle(surface, (0, 0, 0),
+                                         (eye_x + pupil_offset_x,
+                                          eye_y + pupil_offset_y),
+                                         pupil_radius)
+
+    def _draw_emote(self, surface, alpha=255):
+        """Draw emote above snake's head"""
+        if not self.emote:
             return
-            
-        head = self.body[-1]
-        emote_y = head[1] - 25
-        emote_x = head[0] + self.block_size // 2
+        
+        # Position emote above snake's head
+        emote_x = self.x + self.block_size // 2
+        emote_y = self.y - 20
         
         if self.emote == 'heart':
-            # Draw simple 8-bit heart
-            color = (255, 0, 0)  # Bright red
-            pixel_size = 3
-            
-            # Heart pattern (1 = pixel, 0 = empty)
-            heart_pattern = [
+            # Draw 8-bit style heart
+            pixel_size = 2
+            heart_pixels = [
                 [0,1,1,0,1,1,0],
                 [1,1,1,1,1,1,1],
                 [1,1,1,1,1,1,1],
@@ -384,21 +481,32 @@ class Snake:
                 [0,0,0,1,0,0,0],
             ]
             
-            # Draw each pixel of the heart
-            for y, row in enumerate(heart_pattern):
+            for y, row in enumerate(heart_pixels):
                 for x, pixel in enumerate(row):
                     if pixel:
-                        pygame.draw.rect(surface, color,
-                                       [emote_x - (len(row) * pixel_size // 2) + (x * pixel_size),
-                                        emote_y + (y * pixel_size),
-                                        pixel_size, pixel_size])
+                        pygame.draw.rect(surface, (255, 100, 100),
+                                       (emote_x - 7 + x * pixel_size,
+                                        emote_y - 6 + y * pixel_size,
+                                        pixel_size, pixel_size))
         
-        elif self.emote == 'exclamation':
-            # Draw exclamation mark
+        elif self.emote == '!!!':
+            # Existing exclamation mark drawing code...
             color = (255, 255, 255)
             pygame.draw.rect(surface, color, (emote_x - 2, emote_y - 12, 4, 8))
             pygame.draw.rect(surface, color, (emote_x - 2, emote_y - 2, 4, 4))
-    
+        
+        elif self.emote == 'angry':
+            # Draw angry eyebrows
+            color = (255, 100, 100)  # Red color for anger
+            # Left eyebrow (angled down towards center)
+            pygame.draw.line(surface, color, 
+                            (emote_x - 10, emote_y - 8),
+                            (emote_x - 4, emote_y - 4), 3)
+            # Right eyebrow (angled down towards center)
+            pygame.draw.line(surface, color,
+                            (emote_x + 10, emote_y - 8),
+                            (emote_x + 4, emote_y - 4), 3)
+
     def grow(self):
         """Increase the length of the snake"""
         self.length += 1 
@@ -529,3 +637,10 @@ class Snake:
             # Start cooldown
             self.can_spit = False
             self.spit_cooldown = 0 
+
+    def start_ascension(self):
+        """Start the ascension animation"""
+        self.is_ascending = True
+        self.ascension_timer = 0
+        self.original_y = self.y
+        self.ascension_shake_intensity = 0 

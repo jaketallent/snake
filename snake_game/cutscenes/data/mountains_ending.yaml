@@ -1,0 +1,83 @@
+sprites:
+  snake_god:
+    type: snake_god
+    position: ["center_x - 200", 150]  # Position left side
+  
+  bird_god:
+    type: bird_god
+    position: ["center_x + 200", 150]  # Position right side
+
+initial_state:
+  snake:
+    position: ["center_x", "height - 200"]
+    is_sleeping: false
+    emote: null
+
+sequence:
+  - type: dialogue
+    text: "..."
+
+  - type: dialogue
+    text: "Where are my eggs?"
+
+  - type: dialogue
+    text: "Where are my babies??"
+
+  - type: action
+    duration: 60
+    actions:
+      - ["snake_look_at", "bird_god"]
+
+  - type: action
+    duration: 120
+    actions:
+      - ["bird_god_appear", true]
+
+  - type: dialogue
+    text: "So... you have consumed my champion, and your own eggs along with him."
+    focus: "bird_god"
+
+  - type: dialogue
+    text: "Your hunger for revenge is satisfied - at a great cost."
+
+  - type: action
+    duration: 120
+    actions:
+      - ["snake_god_appear", true]
+
+  - type: dialogue
+    text: "Heed not this squawking. You have gained such power, you are beyond such petty things as offspring."
+    focus: "snake_god"
+
+  - type: dialogue
+    text: "No. I can't have..."
+    focus: "snake"
+
+  - type: dialogue
+    text: "What have I done??"
+    focus: "snake"
+
+  - type: action
+    duration: 120
+    actions:
+      - ["bird_god_appear", false]
+      - ["snake_god_appear", false]
+      - ["snake_angry", true]
+
+  - type: dialogue
+    text: "..."
+    focus: "snake"
+
+  - type: action
+    duration: 60
+    actions:
+      - ["stop_looking", true]
+
+  - type: action  # New action without duration
+    actions:
+      - ["snake_ascend", true]
+
+  - type: action
+    duration: 120  # Increased from 60 to 120 frames
+    actions:
+      - ["end_cutscene", true] 

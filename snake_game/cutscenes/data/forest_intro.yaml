@@ -22,6 +22,7 @@ sequence:
 
   - type: dialogue
     text: "You have become fat and strong." 
+    focus: "snake_god"
 
   - type: dialogue
     text: "It may not appear so, but this is a trick of perspective." 

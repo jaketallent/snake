@@ -305,6 +305,11 @@ class Game:
             self.window.blit(text_surface, text_rect)
 
     def draw_ui(self):
+        """Draw UI elements like score, food streak, etc."""
+        # Don't draw UI if snake is ascending (end of game)
+        if self.snake.is_ascending:
+            return
+            
         # Use the initialized font
         font = self.font
         
@@ -325,8 +330,19 @@ class Game:
             score_surface = font.render(score_text, True, (255, 255, 255))
             score_rect = score_surface.get_rect(topleft=(10, score_y))
             self.window.blit(score_surface, score_rect)
+        elif self.current_level.level_data.get('has_target_mountain', False):
+            # Mountain level - show Eagle counter
+            if self.current_level.food_count >= self.current_level.required_food:
+                food_count = self.current_level.required_food
+            else:
+                food_count = self.current_level.food_count
+            
+            score_text = f"Eagle: {food_count}/{self.current_level.required_food}"
+            score_surface = font.render(score_text, True, (255, 255, 255))
+            score_rect = score_surface.get_rect(topleft=(10, score_y))
+            self.window.blit(score_surface, score_rect)
         else:
-            # Show full amount if we've hit or exceeded the requirement
+            # Regular level - show Food counter
             if self.current_level.food_count >= self.current_level.required_food:
                 food_count = self.current_level.required_food
             else:
