@@ -68,11 +68,15 @@ class BaseLevel:
         self.target_mountain = None
         self.eagle_spawned = False
         
+        # Initialize obstacles and target mountain if needed
         if level_data.get('has_target_mountain', False):
             self.initialize_obstacles()
             # After obstacles are created, randomly select a mountain peak as target
-            mountain_peaks = [obs for obs in self.obstacles 
-                            if isinstance(obs, MountainPeak)]
+            # Only choose mountains that are visible on-screen (inside the play area)
+            mountain_peaks = [
+                obs for obs in self.obstacles 
+                if isinstance(obs, MountainPeak) and self._is_mountain_visible(obs)
+            ]
             if mountain_peaks:
                 self.target_mountain = random.choice(mountain_peaks)
         else:
@@ -1276,3 +1280,20 @@ class BaseLevel:
             count_text = f"Food: {self.food_count}/{self.required_food}"
         
         # Rest of UI drawing code... 
+
+    def _is_mountain_visible(self, mountain):
+        """
+        Checks if the given mountain's hitbox is at least partially visible within the play area.
+        Returns True if the mountain's hitbox collides with the visible play area rectangle.
+        """
+        hitbox = mountain.get_hitbox()
+        if not hitbox:
+            return False
+        # Define the visible area using the play_area (from self.play_area)
+        visible_rect = pygame.Rect(
+            0,
+            self.play_area['top'],
+            self.game.width,
+            self.play_area['bottom'] - self.play_area['top']
+        )
+        return hitbox.colliderect(visible_rect) 
