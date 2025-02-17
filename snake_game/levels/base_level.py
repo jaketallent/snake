@@ -1150,36 +1150,37 @@ class BaseLevel:
             # Use block_size grid alignment like before
             grid_x = random.randint(0, (self.game.width - snake.block_size) // snake.block_size)
             grid_y = random.randint(self.play_area['top'] // snake.block_size,
-                                  (self.play_area['bottom'] - snake.block_size) // snake.block_size)
-            
+                                      (self.play_area['bottom'] - snake.block_size) // snake.block_size)
+
             x = grid_x * snake.block_size
             y = grid_y * snake.block_size
-            
-            # Check collision with obstacles
+
+            # Check collision with obstacles based on their primary hitboxes
             collision = False
             for obstacle in self.obstacles:
                 hitbox = obstacle.get_hitbox()
                 if hitbox is None:
                     continue
-                    
+
                 if isinstance(hitbox, list):
                     for box in hitbox:
                         if pygame.Rect(x, y, snake.block_size, snake.block_size).colliderect(box):
                             collision = True
                             break
+                    if collision:
+                        break
                 else:
                     if pygame.Rect(x, y, snake.block_size, snake.block_size).colliderect(hitbox):
                         collision = True
-                
-                if collision:
-                    break
-            
-            if not collision:
+                        break
+
+            # Also check if this spot collides with any no-spawn areas (such as building tops or mountain parts)
+            if not collision and not self._collides_with_no_spawn(x, y):
                 snake.reset(x, y)
                 return
-                
+
             attempts += 1
-        
+
         # Fallback if no valid spot found - also grid aligned
         fallback_x = (self.game.width // 2) // snake.block_size * snake.block_size
         fallback_y = ((self.play_area['top'] + self.play_area['bottom']) // 2) // snake.block_size * snake.block_size
