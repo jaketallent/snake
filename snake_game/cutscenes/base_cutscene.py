@@ -337,6 +337,11 @@ class BaseCutscene:
             y = y.replace('height', str(self.game.height))
             y = eval(y)
         
+        # Snap the resolved positions to the nearest grid using the snake's block_size
+        block_size = self.game.snake.block_size
+        x = round(x / block_size) * block_size
+        y = round(y / block_size) * block_size
+        
         return x, y 
 
     def end_sequence(self):

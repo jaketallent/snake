@@ -42,6 +42,9 @@ class Snake:
         self.original_y = 0  # Store original y position for ascension
         
     def reset(self, x, y):
+        # Snap the provided coordinates to the nearest grid position
+        x = round(x / self.block_size) * self.block_size
+        y = round(y / self.block_size) * self.block_size
         self.x = x
         self.y = y
         self.dx = 0

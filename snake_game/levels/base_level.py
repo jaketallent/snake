@@ -1203,6 +1203,13 @@ class BaseLevel:
         self.game.snake.is_angry = False  # Reset angry state
         self.game.snake.emote = None
         self.game.snake.look_at(None)
+        
+        # If this is the desert level, snap the snake's position to the grid.
+        if self.level_data.get('biome') == 'desert':
+            snake = self.game.snake
+            snake.x = round(snake.x / snake.block_size) * snake.block_size
+            snake.y = round(snake.y / snake.block_size) * snake.block_size
+        
         # Start appropriate music
         self.game.music_manager.play_game_music(
             self.level_data['biome'], 
