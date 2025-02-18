@@ -834,8 +834,11 @@ class BaseLevel:
             
         snake_rect = pygame.Rect(snake.x, snake.y, 
                                snake.block_size, snake.block_size)
-        food_rect = pygame.Rect(self.food.x, self.food.y, 
-                              self.block_size, self.block_size)
+        # Use the food's custom hitbox if available
+        food_rect = self.food.get_hitbox() if hasattr(self.food, 'get_hitbox') else pygame.Rect(
+            self.food.x, self.food.y, 
+            self.block_size, self.block_size
+        )
         
         if snake_rect.colliderect(food_rect):
             # Only increment food count if it's the eagle in mountain level
@@ -1082,10 +1085,19 @@ class BaseLevel:
                     # If this is the target mountain, spawn the eagle
                     if obs == self.target_mountain and not self.eagle_spawned:
                         self.eagle_spawned = True
-                        self.food = Food(obs.x + obs.width//2, 
-                                       obs.y + obs.height//2,
-                                       EAGLE_CRITTER,
-                                       self.block_size)
+                        # Calculate the proposed position from the mountain's center
+                        proposed_x = obs.x + obs.width // 2
+                        proposed_y = obs.y + obs.height // 2
+                        self.food = Food(proposed_x, proposed_y, EAGLE_CRITTER, self.block_size)
+                        # Adjust eagle food position to ensure it is fully visible on-screen horizontally
+                        block = self.block_size // 4  # Used in Food.get_hitbox for eagle
+                        eagle_width = block * 8        # Eagle hitbox width in pixels
+                        # Snap x position to the grid
+                        new_x = round(self.food.x / self.block_size) * self.block_size
+                        # If the eagle would go off the right side of the screen, clamp new_x
+                        if new_x + eagle_width > self.game.width:
+                            new_x = (self.game.width - eagle_width) // self.block_size * self.block_size
+                        self.food.x = new_x
                     
                     # If it's a mountain, dry up any rivers sourced from it
                     if isinstance(obs, MountainPeak):

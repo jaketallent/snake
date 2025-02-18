@@ -121,30 +121,28 @@ class Snake:
             
             if self.ascension_timer < 60:  # First second: build up shaking
                 self.ascension_shake_intensity = self.ascension_timer / 15
-                shake_offset = random.randint(-int(self.ascension_shake_intensity * 5), 
-                                           int(self.ascension_shake_intensity * 5))
+                shake_offset = random.randint(-int(self.ascension_shake_intensity * 5), int(self.ascension_shake_intensity * 5))
                 self.x += shake_offset
                 
             elif self.ascension_timer == 60:  # At 1 second: start rising
                 self.dy = -15  # Initial upward speed
                 
             elif self.ascension_timer > 60:  # After 1 second: accelerate upward
-                self.dy *= 1.1  # Gentler acceleration
+                self.dy *= 1.1  # Gentle acceleration
                 new_y = self.y + self.dy
-                # Clamp the position to prevent overflow
                 self.y = max(-1000, new_y)  # Don't let y go below -1000
                 
                 # Add slight horizontal wobble during ascent
                 self.x += math.sin(self.ascension_timer * 0.2) * 5
-                # Keep x within screen bounds
                 self.x = max(-100, min(self.game.width + 100, self.x))
-
-            # Update all body segments to follow the head's movement
-            dx = self.x - old_x
-            dy = self.y - old_y
-            for segment in self.body:
-                segment[0] += dx
-                segment[1] += dy
+            
+            # Instead of shifting body segments by dx/dy (which preserves horizontal alignment),
+            # we update them in reverse order so that the head (last element) is at (self.x, self.y)
+            # and each preceding segment trails below.
+            n = len(self.body)
+            for i in range(n):
+                self.body[n-1-i][0] = self.x                        # Head (i==0) remains at exactly (self.x, self.y)
+                self.body[n-1-i][1] = self.y + i * self.block_size    # Trailing segments go downward
             
             return
 

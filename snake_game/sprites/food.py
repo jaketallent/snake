@@ -297,4 +297,23 @@ class Food:
             # Right foot talons
             pygame.draw.rect(surface, beak_color,
                             [self.x + block*(5 + i*0.75), self.y + block*5,
-                             block//2, block]) 
+                             block//2, block])
+
+    def get_hitbox(self):
+        """Return a custom hitbox for the eagle that matches its visual size"""
+        if self.is_eagle:
+            # The eagle is drawn with a width of 8 blocks and height of 6 blocks
+            block = self.block_size // 4
+            return pygame.Rect(
+                self.x,              # Left edge
+                self.y + block,      # Top edge (slightly below visual top to account for wings)
+                block * 8,           # Width (8 blocks total)
+                block * 5            # Height (5 blocks to match body + talons)
+            )
+        # Default hitbox for other food types
+        return pygame.Rect(
+            self.x, 
+            self.y, 
+            self.block_size, 
+            self.block_size
+        ) 
