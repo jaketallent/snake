@@ -1,0 +1,23 @@
+sprites:
+  snake_god:
+    type: snake_god
+    position: [center_x, 150]
+
+snake:
+  position: [center_x, center_y]
+  state:
+    sleeping: false
+    length: 1
+
+sequence:
+  - type: dialogue
+    text: "A new challenge awaits in the sky..."
+    speaker: snake_god
+  
+  - type: dialogue
+    text: "I'm ready for anything!"
+  
+  - type: action
+    duration: 60
+    actions:
+      - [fade_out, true]

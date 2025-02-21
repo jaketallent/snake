@@ -3,7 +3,7 @@ import random
 import math
 from sprites.food import Food
 from sprites.obstacle import (Cactus, Tree, Bush, Pond, Building, 
-                            Park, Lake, Rubble, MountainPeak, MountainRidge, River)
+                            Park, Lake, Rubble, MountainPeak, MountainRidge, River, Cloud)
 from sprites.snake import Snake
 from .sky_manager import SkyManager
 from .level_data import TIMES_OF_DAY, EAGLE_CRITTER
@@ -42,20 +42,29 @@ class BaseLevel:
             game.width, 
             game.height, 
             0,  # sky starts at top
-            sky_theme
+            sky_theme,
+            full_sky=level_data.get('full_sky', False)  # Pass the full_sky flag
         )
         
-        # Calculate play area dynamically based on sky height
-        sky_height = self.sky_manager.get_sky_height()
-        self.play_area = {
-            'top': sky_height,
-            'bottom': level_data['play_area']['bottom']
-        }
-        
-        # If it's the city biome, shift the top boundary down slightly
-        if self.level_data['biome'] == 'city':
-            # For example, let the snake move 30 pixels closer to the sky border
-            self.play_area['top'] -= 30
+        # Calculate play area
+        if self.level_data.get('full_sky', False):
+            # For sky level, use the full screen height
+            self.play_area = {
+                'top': 0,  # Full access to top
+                'bottom': self.game.height  # Full access to bottom
+            }
+        else:
+            # For other levels, use sky height as before
+            sky_height = self.sky_manager.get_sky_height()
+            self.play_area = {
+                'top': sky_height,
+                'bottom': level_data['play_area']['bottom']
+            }
+            
+            # If it's the city biome, shift the top boundary down slightly
+            if self.level_data['biome'] == 'city':
+                # For example, let the snake move 30 pixels closer to the sky border
+                self.play_area['top'] -= 30
         
         is_night = self.current_time in ['night', 'sunset']
         self.night_music = is_night
@@ -300,6 +309,12 @@ class BaseLevel:
                     size = random.randint(min_size, max_size)
                     variations = {'size': size}
                     new_obstacle = MountainRidge(x, y, variations, self.block_size)
+                elif obstacle_type == 'cloud':
+                    variations = {
+                        'width': random.randint(min_size, max_size),
+                        'height': random.randint(min_size-1, max_size-1)
+                    }
+                    new_obstacle = Cloud(x, y, variations, self.block_size)
                 elif obstacle_type == 'river':
                     # Find mountains to start from
                     mountain_peaks = [obs for obs in self.obstacles 
@@ -417,68 +432,114 @@ class BaseLevel:
         max_attempts = 300
         attempts = 0
 
-        while attempts < max_attempts:
-            # Calculate grid-aligned positions
-            grid_x = random.randint(0, (self.game.width - self.block_size) // self.block_size)
-            grid_y = random.randint(self.play_area['top'] // self.block_size, 
-                                  (self.play_area['bottom'] - self.block_size) // self.block_size)
-            
-            # Convert to pixel coordinates
-            x = grid_x * self.block_size
-            y = grid_y * self.block_size
+        # For sky level, use full vertical space and no obstacle checks
+        is_sky_level = self.level_data.get('full_sky', False)
+        if is_sky_level:
+            while attempts < max_attempts:
+                # Calculate grid-aligned positions using full sky area
+                grid_x = random.randint(0, (self.game.width - self.block_size) // self.block_size)
+                grid_y = random.randint(50 // self.block_size,  # Leave small margin at top
+                                  550 // self.block_size)  # Sky level height
+                
+                # Convert to pixel coordinates
+                x = grid_x * self.block_size
+                y = grid_y * self.block_size
 
-            # Create rect for the food
-            food_rect = pygame.Rect(x, y, self.block_size, self.block_size)
-            buffer_rect = food_rect.copy()
-            buffer_rect.height += self.block_size
-            buffer_rect.y -= self.block_size
-
-            # Check collision with obstacles
-            collision_found = False
-            for obstacle in self.obstacles:
-                if not hasattr(obstacle, 'get_no_spawn_rects'):
-                    hitbox = obstacle.get_hitbox()
-                    if hitbox is None:
-                        continue
-                    if isinstance(hitbox, list):
-                        for box in hitbox:
-                            if buffer_rect.colliderect(box):
-                                collision_found = True
-                                break
-                    elif buffer_rect.colliderect(hitbox):
-                        collision_found = True
-                else:
-                    # For obstacles with no_spawn_rects
-                    no_spawn_rects = obstacle.get_no_spawn_rects()
-                    for rect in no_spawn_rects:
-                        if buffer_rect.colliderect(rect):
-                            collision_found = True
-                            break
-
-                if collision_found:
-                    break
-            
-            # Check collision with snake body
-            if not collision_found:
+                # Only check collision with snake body
+                collision_found = False
                 for segment in self.game.snake.body:
                     segment_rect = pygame.Rect(segment[0], segment[1], 
                                             self.block_size, self.block_size)
-                    if buffer_rect.colliderect(segment_rect):
+                    food_rect = pygame.Rect(x, y, self.block_size, self.block_size)
+                    if food_rect.colliderect(segment_rect):
                         collision_found = True
                         break
+                
+                if not collision_found:
+                    # Create food with random sky critter
+                    critter_data = random.choice(self.level_data['critters'])
+                    self.food = Food(x, y, critter_data, self.block_size)
+                    return True
+                
+                attempts += 1
             
-            # If no collision, spawn food
-            if not collision_found:
-                critter_data = random.choice(self.level_data['critters'])
-                self.food = Food(x, y, critter_data, self.block_size)
-                return True
-            
-            attempts += 1
+            # If we get here, we failed to find a spot after max attempts
+            # Try one last time without collision checks as a fallback
+            x = random.randint(0, self.game.width - self.block_size)
+            y = random.randint(50, 550 - self.block_size)
+            critter_data = random.choice(self.level_data['critters'])
+            self.food = Food(x, y, critter_data, self.block_size)
+            return True
+
+        else:  # Regular level spawning logic
+            while attempts < max_attempts:
+                # Calculate grid-aligned positions
+                grid_x = random.randint(0, (self.game.width - self.block_size) // self.block_size)
+                grid_y = random.randint(self.play_area['top'] // self.block_size, 
+                                      (self.play_area['bottom'] - self.block_size) // self.block_size)
+                
+                # Convert to pixel coordinates
+                x = grid_x * self.block_size
+                y = grid_y * self.block_size
+
+                # Create rect for the food
+                food_rect = pygame.Rect(x, y, self.block_size, self.block_size)
+                buffer_rect = food_rect.copy()
+                buffer_rect.height += self.block_size
+                buffer_rect.y -= self.block_size
+
+                # Check collision with obstacles
+                collision_found = False
+                for obstacle in self.obstacles:
+                    if not hasattr(obstacle, 'get_no_spawn_rects'):
+                        hitbox = obstacle.get_hitbox()
+                        if hitbox is None:
+                            continue
+                        if isinstance(hitbox, list):
+                            for box in hitbox:
+                                if buffer_rect.colliderect(box):
+                                    collision_found = True
+                                    break
+                        elif buffer_rect.colliderect(hitbox):
+                            collision_found = True
+                    else:
+                        # For obstacles with no_spawn_rects
+                        no_spawn_rects = obstacle.get_no_spawn_rects()
+                        for rect in no_spawn_rects:
+                            if buffer_rect.colliderect(rect):
+                                collision_found = True
+                                break
+
+                    if collision_found:
+                        break
+                
+                # Check collision with snake body
+                if not collision_found:
+                    for segment in self.game.snake.body:
+                        segment_rect = pygame.Rect(segment[0], segment[1], 
+                                                self.block_size, self.block_size)
+                        if buffer_rect.colliderect(segment_rect):
+                            collision_found = True
+                            break
+                
+                # If no collision, spawn food
+                if not collision_found:
+                    critter_data = random.choice(self.level_data['critters'])
+                    self.food = Food(x, y, critter_data, self.block_size)
+                    return True
+                
+                attempts += 1
         
         # If we reach here, no spot was found. Use fallback position (grid-aligned)
         print("Warning: Could not place food after many attempts. Using fallback.")
         fallback_x = (self.game.width // 2) // self.block_size * self.block_size
-        fallback_y = ((self.play_area['top'] + self.play_area['bottom']) // 2) // self.block_size * self.block_size
+        
+        # Adjust fallback y position based on level type
+        if is_sky_level:
+            fallback_y = 300 // self.block_size * self.block_size  # Middle of sky area
+        else:
+            fallback_y = ((self.play_area['top'] + self.play_area['bottom']) // 2) // self.block_size * self.block_size
+        
         critter_data = random.choice(self.level_data['critters'])
         self.food = Food(fallback_x, fallback_y, critter_data, self.block_size)
         return True
@@ -624,10 +685,12 @@ class BaseLevel:
         elif snake.x >= self.game.width - snake.block_size:
             snake.x = self.game.width - snake.block_size
         
-        if snake.y < self.play_area['top']:
-            snake.y = self.play_area['top']
-        elif snake.y >= self.play_area['bottom'] - snake.block_size:
-            snake.y = self.play_area['bottom'] - snake.block_size
+        # For sky level, allow full vertical movement
+        if not self.level_data.get('full_sky', False):
+            if snake.y < self.play_area['top']:
+                snake.y = self.play_area['top']
+            elif snake.y >= self.play_area['bottom'] - snake.block_size:
+                snake.y = self.play_area['bottom'] - snake.block_size
 
         # Continue with other collision checks...
         new_x, new_y = snake.update()
@@ -940,11 +1003,14 @@ class BaseLevel:
         # Draw sky using sky manager
         self.sky_manager.draw(surface)
         
-        # Special handling for mountain biome
+        # Special handling for different biomes
         if self.level_data['biome'] == 'mountain':
             self._draw_mountain_background(surface)
         elif self.level_data['biome'] == 'city':
             self._draw_city_background(surface)
+        elif self.level_data['biome'] == 'sky':
+            # Sky level doesn't need additional background drawing
+            pass
         else:
             # Original background drawing for desert/forest
             ground_colors = self.level_data['background_colors']['ground']

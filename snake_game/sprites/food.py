@@ -48,6 +48,14 @@ class Food:
             self._draw_bus(surface, block)
         elif self.critter_data['type'] == 'van':
             self._draw_van(surface, block)
+        elif self.critter_data['type'] == 'plane':
+            self._draw_plane(surface, block)
+        elif self.critter_data['type'] == 'helicopter':
+            self._draw_helicopter(surface, block)
+        elif self.critter_data['type'] == 'bird_flock':
+            self._draw_bird_flock(surface, block)
+        elif self.critter_data['type'] == 'cloud_food':
+            self._draw_cloud_food(surface, block)
     
     def _draw_boulder(self, surface, block):
         """Draw a simple boulder (grey square with lighter highlight)"""
@@ -316,4 +324,63 @@ class Food:
             self.y, 
             self.block_size, 
             self.block_size
-        ) 
+        )
+
+    def _draw_plane(self, surface, block):
+        # Body
+        pygame.draw.rect(surface, self.critter_data['color'],
+                        [self.x + block, self.y + block, block * 3, block])
+        # Wings
+        pygame.draw.rect(surface, self.critter_data['color'],
+                        [self.x, self.y + block, block * 5, block])
+        # Tail
+        pygame.draw.rect(surface, self.critter_data['secondary_color'],
+                        [self.x + block * 3, self.y, block, block * 3])
+
+    def _draw_helicopter(self, surface, block):
+        # Body
+        pygame.draw.rect(surface, self.critter_data['color'],
+                        [self.x + block, self.y + block, block * 2, block])
+        # Main rotor
+        pygame.draw.rect(surface, self.critter_data['secondary_color'],
+                        [self.x, self.y, block * 4, block])
+        # Tail
+        pygame.draw.rect(surface, self.critter_data['color'],
+                        [self.x + block * 3, self.y + block, block, block])
+        # Tail rotor
+        pygame.draw.rect(surface, self.critter_data['secondary_color'],
+                        [self.x + block * 3, self.y + block * 2, block, block])
+
+    def _draw_bird_flock(self, surface, block):
+        # Draw multiple small birds in V formation
+        bird_color = self.critter_data['color']
+        positions = [
+            (block * 2, block),      # Lead bird
+            (block, block * 2),      # Left wing
+            (block * 3, block * 2),  # Right wing
+            (0, block * 3),          # Far left
+            (block * 4, block * 3)   # Far right
+        ]
+        for x_offset, y_offset in positions:
+            # Bird body
+            pygame.draw.rect(surface, bird_color,
+                            [self.x + x_offset, self.y + y_offset, block, block])
+            # Bird wings
+            pygame.draw.rect(surface, bird_color,
+                            [self.x + x_offset - block//2, self.y + y_offset, block//2, block//2])
+            pygame.draw.rect(surface, bird_color,
+                            [self.x + x_offset + block, self.y + y_offset, block//2, block//2])
+
+    def _draw_cloud_food(self, surface, block):
+        # Fluffy cloud shape
+        cloud_color = self.critter_data['color']
+        highlight_color = self.critter_data['secondary_color']
+        
+        # Main cloud body
+        pygame.draw.rect(surface, cloud_color,
+                        [self.x + block, self.y + block, block * 3, block * 2])
+        # Top puffs
+        pygame.draw.rect(surface, highlight_color,
+                        [self.x + block, self.y, block * 2, block])
+        pygame.draw.rect(surface, highlight_color,
+                        [self.x + block * 2, self.y + block//2, block * 2, block])

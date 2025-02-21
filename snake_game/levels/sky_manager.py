@@ -132,15 +132,19 @@ class Star:
         pygame.draw.rect(surface, color, [self.x, self.y, self.size, self.size])
 
 class SkyManager:
-    def __init__(self, width, height, top, sky_theme):
+    def __init__(self, width, height, top, sky_theme, full_sky=False):
         self.width = width
         self.height = height
         self.top = top
         self.sky_theme = sky_theme
+        self.full_sky = full_sky
         
         # Randomize celestial body position
         self.celestial_x = random.randint(width // 4, 3 * width // 4)  # Between 25-75% of width
-        self.celestial_y = random.randint(top + 50, height // 3)  # Keep in upper third of sky
+        if full_sky:
+            self.celestial_y = random.randint(height // 6, height // 2)  # Allow lower positioning in full sky mode
+        else:
+            self.celestial_y = random.randint(top + 50, height // 3)  # Keep in upper third of sky
         
         # Initialize celestial body with random position
         self.celestial_body = CelestialBody(
@@ -177,25 +181,36 @@ class SkyManager:
     
     def init_clouds(self):
         """Initialize cloud objects"""
-        num_clouds = random.randint(3, 6)
+        num_clouds = random.randint(6, 10) if self.full_sky else random.randint(3, 6)
         for _ in range(num_clouds):
             x = random.randrange(-self.width, self.width * 2)
-            y = random.randrange(self.top, self.height // 3)
+            if self.full_sky:
+                y = random.randrange(0, self.height - 50)  # Spread throughout screen
+            else:
+                y = random.randrange(self.top, self.height // 3)
             size = random.randint(8, 16)
             speed = random.uniform(0.2, 0.5)
             self.clouds.append(Cloud(x, y, size, speed))
     
     def init_stars(self):
         """Initialize star objects for night sky"""
-        for _ in range(50):
+        num_stars = 100 if self.full_sky else 50
+        for _ in range(num_stars):
             x = random.randrange(0, self.width)
-            y = random.randrange(self.top, self.height // 3)
+            if self.full_sky:
+                y = random.randrange(0, self.height)
+            else:
+                y = random.randrange(self.top, self.height // 3)
             self.stars.append(Star(x, y, 2))
     
     def create_gradient(self, colors):
         """Create a gradient surface using the theme colors"""
-        gradient_height = self.height // 3 - self.top
-        surface = pygame.Surface((self.width, gradient_height), pygame.SRCALPHA)
+        if self.full_sky:
+            gradient_height = self.height
+            surface = pygame.Surface((self.width, gradient_height), pygame.SRCALPHA)
+        else:
+            gradient_height = self.height // 3 - self.top
+            surface = pygame.Surface((self.width, gradient_height), pygame.SRCALPHA)
         
         for y in range(gradient_height):
             progress = y / gradient_height
