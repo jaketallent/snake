@@ -15,7 +15,16 @@ class EnemySnake(Snake):
         self.wall_bounce_cooldown = 0
         
     def update(self):
-        # Check if we're stuck
+        # Don't make decisions or move if dead
+        if self.is_dead:
+            self.death_timer += 1
+            # Fall off screen
+            self.y += 2  # Fall speed
+            # Update body segments to follow
+            self.move_to(self.x, self.y)
+            return None, None  # Don't process normal movement when dead
+        
+        # Normal update logic
         if (self.x, self.y) == self.last_pos:
             self.stuck_timer += 1
         else:

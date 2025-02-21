@@ -1237,6 +1237,12 @@ class BaseLevel:
         if self.enemy_snake:
             new_x, new_y = self.enemy_snake.update()
             
+            if self.enemy_snake.is_dead:
+                # Remove enemy snake if it's fallen off screen
+                if self.enemy_snake.y > self.game.height:
+                    self.enemy_snake = None
+                return
+            
             if new_x is not None:
                 # Check if we're about to hit a wall
                 will_hit_vertical_wall = new_x < 0 or new_x >= self.game.width - self.enemy_snake.block_size
@@ -1437,35 +1443,36 @@ class BaseLevel:
         if not self.enemy_snake:
             return
             
-        # Get snake head positions
         player = self.game.snake
         enemy = self.enemy_snake
         
-        player_rect = pygame.Rect(player.x, player.y, player.block_size, player.block_size)
-        enemy_rect = pygame.Rect(enemy.x, enemy.y, enemy.block_size, enemy.block_size)
+        # Check head and body segments for both snakes
+        player_segments = [pygame.Rect(x, y, player.block_size, player.block_size) 
+                         for x, y in [*player.body, [player.x, player.y]]]
+        enemy_segments = [pygame.Rect(x, y, enemy.block_size, enemy.block_size) 
+                         for x, y in [*enemy.body, [enemy.x, enemy.y]]]
         
-        if player_rect.colliderect(enemy_rect):
-            SNAKE_DAMAGE = 5  # Damage dealt by powered-up snake
-            
-            # If both powered up, both take damage
-            if player.is_powered_up and enemy.is_powered_up:
-                player.take_snake_damage(SNAKE_DAMAGE)
-                enemy.take_snake_damage(SNAKE_DAMAGE)
-            # If only player powered up, enemy takes damage
-            elif player.is_powered_up:
-                enemy.take_snake_damage(SNAKE_DAMAGE)
-            # If only enemy powered up, player takes damage
-            elif enemy.is_powered_up:
-                player.take_snake_damage(SNAKE_DAMAGE)
-
-    def _check_collision_with_food(self, snake):
-        """Check if given snake collides with food"""
-        if not self.food:
-            return False
-            
-        snake_rect = pygame.Rect(snake.x, snake.y, snake.block_size, snake.block_size)
-        food_rect = self.food.get_hitbox()
-        return snake_rect.colliderect(food_rect) 
+        # Check if any segments collide
+        for player_rect in player_segments:
+            for enemy_rect in enemy_segments:
+                if player_rect.colliderect(enemy_rect):
+                    SNAKE_DAMAGE = 5  # Damage dealt by powered-up snake
+                    
+                    # If both powered up, both take damage and lose power-up
+                    if player.is_powered_up and enemy.is_powered_up:
+                        player.take_snake_damage(SNAKE_DAMAGE)
+                        enemy.take_snake_damage(SNAKE_DAMAGE)
+                        player.is_powered_up = False
+                        enemy.is_powered_up = False
+                    # If only player powered up, enemy takes damage
+                    elif player.is_powered_up:
+                        enemy.take_snake_damage(SNAKE_DAMAGE)
+                        player.is_powered_up = False
+                    # If only enemy powered up, player takes damage
+                    elif enemy.is_powered_up:
+                        player.take_snake_damage(SNAKE_DAMAGE)
+                        enemy.is_powered_up = False
+                    return  # Exit after first collision
 
     def _check_projectile_collisions(self):
         """Handle projectile collisions between snakes"""
@@ -1475,17 +1482,36 @@ class BaseLevel:
         # Check player projectiles hitting enemy
         for proj in player.projectiles[:]:
             proj_rect = pygame.Rect(proj['x'] - 4, proj['y'] - 4, 8, 8)
-            enemy_rect = pygame.Rect(enemy.x, enemy.y, enemy.block_size, enemy.block_size)
             
-            if proj_rect.colliderect(enemy_rect):
-                player.projectiles.remove(proj)
-                enemy.take_snake_damage(1)  # 1 segment damage
+            # Check against enemy head and body segments
+            enemy_segments = [pygame.Rect(x, y, enemy.block_size, enemy.block_size) 
+                            for x, y in [*enemy.body, [enemy.x, enemy.y]]]
+            
+            for segment in enemy_segments:
+                if proj_rect.colliderect(segment):
+                    player.projectiles.remove(proj)
+                    enemy.take_snake_damage(1)  # 1 segment damage
+                    break  # Stop checking other segments once hit
         
         # Check enemy projectiles hitting player
         for proj in enemy.projectiles[:]:
             proj_rect = pygame.Rect(proj['x'] - 4, proj['y'] - 4, 8, 8)
-            player_rect = pygame.Rect(player.x, player.y, player.block_size, player.block_size)
             
-            if proj_rect.colliderect(player_rect):
-                enemy.projectiles.remove(proj)
-                player.take_snake_damage(1)  # 1 segment damage 
+            # Check against player head and body segments
+            player_segments = [pygame.Rect(x, y, player.block_size, player.block_size) 
+                             for x, y in [*player.body, [player.x, player.y]]]
+            
+            for segment in player_segments:
+                if proj_rect.colliderect(segment):
+                    enemy.projectiles.remove(proj)
+                    player.take_snake_damage(1)  # 1 segment damage
+                    break  # Stop checking other segments once hit 
+
+    def _check_collision_with_food(self, snake):
+        """Check if given snake collides with food"""
+        if not self.food:
+            return False
+            
+        snake_rect = pygame.Rect(snake.x, snake.y, snake.block_size, snake.block_size)
+        food_rect = self.food.get_hitbox()
+        return snake_rect.colliderect(food_rect) 
