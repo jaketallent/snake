@@ -612,8 +612,11 @@ class Snake:
 
     def spit_venom(self):
         """Spit a venom projectile at the cost of one segment"""
-        # Only allow spitting in boss levels
-        if not hasattr(self, 'game') or not self.game.current_level.level_data.get('is_boss', False):
+        # Allow spitting in boss levels OR sky level
+        if not hasattr(self, 'game') or (
+            not self.game.current_level.level_data.get('is_boss', False) and
+            not self.game.current_level.level_data.get('full_sky', False)
+        ):
             return
         
         if len(self.body) > 1 and self.can_spit:
@@ -645,3 +648,15 @@ class Snake:
         self.ascension_timer = 0
         self.original_y = self.y
         self.ascension_shake_intensity = 0 
+
+    def take_snake_damage(self, damage):
+        """Handle taking damage from another snake"""
+        # If damage would destroy our head, die
+        if len(self.body) <= damage:
+            self.die()
+            return True
+        
+        # Otherwise lose the specified number of segments
+        for _ in range(damage):
+            self.lose_segment()
+        return False 
