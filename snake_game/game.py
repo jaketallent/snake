@@ -335,7 +335,7 @@ class Game:
             if self.current_level.food_count >= self.current_level.required_food:
                 food_count = self.current_level.required_food
             else:
-                food_count = 0  # Start at 0 until eagle is eaten
+                food_count = self.current_level.food_count
             
             score_text = f"Eagle: {food_count}/{self.current_level.required_food}"
             score_surface = font.render(score_text, True, (255, 255, 255))

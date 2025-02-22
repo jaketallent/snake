@@ -573,6 +573,35 @@ class BaseLevel:
         self.food.append(new_food)
         return True
 
+    def check_food_collision(self, snake):
+        """
+        Check if the snake collides with any food.
+        If a collision is detected:
+          - Remove the collided food
+          - Call snake.handle_food_eaten() (which maintains the powerup count)
+          - For mountains level (has_target_mountain is True): only increment self.food_count
+            if the food eaten is an eagle.
+          - For all other levels, increment self.food_count normally.
+          - Spawn new food to replace the one eaten.
+        Returns True if a collision occurred.
+        """
+        snake_rect = pygame.Rect(snake.x, snake.y, snake.block_size, snake.block_size)
+        collided = False
+        # Iterate over a copy so removal does not mess up iteration
+        for food_item in self.food[:]:
+            if snake_rect.colliderect(food_item.get_hitbox()):
+                self.food.remove(food_item)
+                snake.handle_food_eaten()  # maintain snake powerup / food streak logic
+                if self.level_data.get('has_target_mountain', False):
+                    # Only count eagle food on mountains level
+                    if food_item.is_eagle:
+                        self.food_count += 1
+                else:
+                    self.food_count += 1
+                self.spawn_food()   # Ensure food is always available
+                collided = True
+        return collided
+
     def _overlaps_building_top(self, x, y):
         """
         Checks if the 1-tile food at (x,y) overlaps any building's top rectangle.
@@ -918,30 +947,6 @@ class BaseLevel:
             snake.die()
             return True
         
-        return False
-    
-    def check_food_collision(self, snake):
-        """Check if snake has collided with any food item."""
-        if not self.food:
-            return False
-        
-        snake_rect = pygame.Rect(snake.x, snake.y, snake.block_size, snake.block_size)
-        
-        for food_item in self.food[:]:  # Use slice copy to safely modify during iteration
-            food_rect = food_item.get_hitbox()
-            if snake_rect.colliderect(food_rect):
-                self.food.remove(food_item)
-                
-                # Only increment food count for non-mountain levels, or if eagle is eaten in mountain level
-                if not self.level_data.get('has_target_mountain', False) or food_item.is_eagle:
-                    self.food_count += 1
-                
-                # Handle special effects or animations
-                if food_item.is_eagle:
-                    # Eagle was eaten - could trigger special effects here
-                    pass
-                
-                return True
         return False
     
     def is_complete(self):
