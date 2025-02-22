@@ -931,18 +931,17 @@ class BaseLevel:
             food_rect = food_item.get_hitbox()
             if snake_rect.colliderect(food_rect):
                 self.food.remove(food_item)
-                self.food_count += 1
                 
-                # Spawn new food if in sky level to maintain 4 items
-                if self.level_data.get('full_sky', False):
-                    self.spawn_food()
-                else:
-                    # For non-sky levels, spawn a single new food item
-                    self.spawn_food()
+                # Only increment food count for non-mountain levels, or if eagle is eaten in mountain level
+                if not self.level_data.get('has_target_mountain', False) or food_item.is_eagle:
+                    self.food_count += 1
                 
-                snake.handle_food_eaten()  # Add this line to handle food streak/power-up
+                # Handle special effects or animations
+                if food_item.is_eagle:
+                    # Eagle was eaten - could trigger special effects here
+                    pass
+                
                 return True
-        
         return False
     
     def is_complete(self):
