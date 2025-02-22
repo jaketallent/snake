@@ -55,7 +55,7 @@ class Food:
         elif self.critter_data['type'] == 'bird_flock':
             self._draw_bird_flock(surface, block)
         elif self.critter_data['type'] == 'cloud_food':
-            self._draw_cloud_food(surface, block)
+            self._draw_cloud_food(surface)
     
     def _draw_boulder(self, surface, block):
         """Draw a simple boulder (grey square with lighter highlight)"""
@@ -371,16 +371,44 @@ class Food:
             pygame.draw.rect(surface, bird_color,
                             [self.x + x_offset + block, self.y + y_offset, block//2, block//2])
 
-    def _draw_cloud_food(self, surface, block):
-        # Fluffy cloud shape
-        cloud_color = self.critter_data['color']
-        highlight_color = self.critter_data['secondary_color']
+    def _draw_cloud_food(self, surface):
+        # Create a darker stormcloud shape
+        cloud_color = self.critter_data['color']  # Dark grey base
+        highlight_color = self.critter_data['secondary_color']  # Light grey highlights
+        lightning_color = self.critter_data['accent_color']  # Yellow for lightning
         
-        # Main cloud body
-        pygame.draw.rect(surface, cloud_color,
-                        [self.x + block, self.y + block, block * 3, block * 2])
-        # Top puffs
-        pygame.draw.rect(surface, highlight_color,
-                        [self.x + block, self.y, block * 2, block])
-        pygame.draw.rect(surface, highlight_color,
-                        [self.x + block * 2, self.y + block//2, block * 2, block])
+        block = self.block_size // 4
+        
+        # Main cloud body (larger and more defined)
+        cloud_rects = [
+            # Bottom layer (dark)
+            (self.x + block, self.y + block * 2, block * 3, block),
+            # Middle layer (dark)
+            (self.x + block * 0.5, self.y + block, block * 4, block),
+            # Top layer (dark)
+            (self.x + block, self.y, block * 3, block)
+        ]
+        
+        # Draw main cloud shapes
+        for rect in cloud_rects:
+            pygame.draw.rect(surface, cloud_color, rect)
+        
+        # Add highlights to give depth
+        highlight_rects = [
+            (self.x + block * 1.5, self.y + block * 0.5, block, block * 0.5),
+            (self.x + block * 3, self.y + block, block, block * 0.5)
+        ]
+        
+        for rect in highlight_rects:
+            pygame.draw.rect(surface, highlight_color, rect)
+        
+        # Add lightning bolt
+        lightning_points = [
+            (self.x + block * 2, self.y + block * 2),  # Start at cloud bottom
+            (self.x + block * 2.5, self.y + block * 2.5),  # Zag right
+            (self.x + block * 2, self.y + block * 3),  # Zag left and down
+            (self.x + block * 2.5, self.y + block * 3.5)  # End right and down
+        ]
+        
+        # Draw lightning with thickness
+        pygame.draw.lines(surface, lightning_color, False, lightning_points, 2)

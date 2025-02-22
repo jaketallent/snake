@@ -100,9 +100,10 @@ SKY_CRITTERS = [
         'size': 20,
         'type': 'bird_flock'
     },
-    {  # Cloud Food
-        'color': (220, 220, 220),  # Light grey
-        'secondary_color': (255, 255, 255),  # White highlights
+    {  # Cloud Food - now a stormcloud
+        'color': (60, 60, 80),  # Darker grey for storm cloud
+        'secondary_color': (120, 120, 140),  # Lighter grey for highlights
+        'accent_color': (255, 255, 0),  # Yellow for lightning
         'size': 20,
         'type': 'cloud_food'
     }
