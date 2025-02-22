@@ -17,7 +17,7 @@ class BaseLevel:
         self.level_data = level_data.copy()
         self.display_name = level_data['name']
         self.obstacles = []
-        self.food = None
+        self.food = []  # Change from None to empty list
         self.food_count = 0
         self.required_food = level_data.get('required_food', 5)
         self.block_size = 20
@@ -93,7 +93,15 @@ class BaseLevel:
             self.initialize_obstacles()
         
         self.find_safe_spawn_for_snake(game.snake)
-        self.spawn_food()
+        
+        # Initialize food based on level type
+        if level_data.get('full_sky', False):
+            # Spawn 4 food items for sky level
+            for _ in range(4):
+                self.spawn_food()
+        else:
+            # Single food for other levels
+            self.spawn_food()
         
         self.ending_cutscene_played = False
         self.current_cutscene = None
@@ -435,7 +443,7 @@ class BaseLevel:
                 # Reset tries? Usually, we just keep counting, so it won't freeze again
 
     def spawn_food(self):
-        """Spawns the food item in a random, valid location."""
+        """Spawns food item(s) in random, valid location(s)."""
         max_attempts = 300
         attempts = 0
 
@@ -452,20 +460,31 @@ class BaseLevel:
                 x = grid_x * self.block_size
                 y = grid_y * self.block_size
 
-                # Only check collision with snake body
+                # Check collision with existing food items
                 collision_found = False
+                food_rect = pygame.Rect(x, y, self.block_size, self.block_size)
+                
+                # Check collision with snake body and existing food
                 for segment in self.game.snake.body:
                     segment_rect = pygame.Rect(segment[0], segment[1], 
                                             self.block_size, self.block_size)
-                    food_rect = pygame.Rect(x, y, self.block_size, self.block_size)
                     if food_rect.colliderect(segment_rect):
+                        collision_found = True
+                        break
+                
+                # Check collision with existing food
+                for existing_food in self.food:
+                    existing_rect = pygame.Rect(existing_food.x, existing_food.y,
+                                             self.block_size, self.block_size)
+                    if food_rect.colliderect(existing_rect):
                         collision_found = True
                         break
                 
                 if not collision_found:
                     # Create food with random sky critter
                     critter_data = random.choice(self.level_data['critters'])
-                    self.food = Food(x, y, critter_data, self.block_size)
+                    new_food = Food(x, y, critter_data, self.block_size)
+                    self.food.append(new_food)
                     return True
                 
                 attempts += 1
@@ -475,7 +494,8 @@ class BaseLevel:
             x = random.randint(0, self.game.width - self.block_size)
             y = random.randint(50, 550 - self.block_size)
             critter_data = random.choice(self.level_data['critters'])
-            self.food = Food(x, y, critter_data, self.block_size)
+            new_food = Food(x, y, critter_data, self.block_size)
+            self.food.append(new_food)
             return True
 
         else:  # Regular level spawning logic
@@ -532,7 +552,8 @@ class BaseLevel:
                 # If no collision, spawn food
                 if not collision_found:
                     critter_data = random.choice(self.level_data['critters'])
-                    self.food = Food(x, y, critter_data, self.block_size)
+                    new_food = Food(x, y, critter_data, self.block_size)
+                    self.food.append(new_food)
                     return True
                 
                 attempts += 1
@@ -548,7 +569,8 @@ class BaseLevel:
             fallback_y = ((self.play_area['top'] + self.play_area['bottom']) // 2) // self.block_size * self.block_size
         
         critter_data = random.choice(self.level_data['critters'])
-        self.food = Food(fallback_x, fallback_y, critter_data, self.block_size)
+        new_food = Food(fallback_x, fallback_y, critter_data, self.block_size)
+        self.food.append(new_food)
         return True
 
     def _overlaps_building_top(self, x, y):
@@ -899,28 +921,28 @@ class BaseLevel:
         return False
     
     def check_food_collision(self, snake):
+        """Check if snake has collided with any food item."""
         if not self.food:
             return False
-            
-        snake_rect = pygame.Rect(snake.x, snake.y, 
-                               snake.block_size, snake.block_size)
-        # Use the food's custom hitbox if available
-        food_rect = self.food.get_hitbox() if hasattr(self.food, 'get_hitbox') else pygame.Rect(
-            self.food.x, self.food.y, 
-            self.block_size, self.block_size
-        )
         
-        if snake_rect.colliderect(food_rect):
-            # Only increment food count if it's the eagle in mountain level
-            # or if it's not the mountain level
-            if (self.level_data.get('has_target_mountain', False) and 
-                self.food.is_eagle) or not self.level_data.get('has_target_mountain', False):
+        snake_rect = pygame.Rect(snake.x, snake.y, snake.block_size, snake.block_size)
+        
+        for food_item in self.food[:]:  # Use slice copy to safely modify during iteration
+            food_rect = food_item.get_hitbox()
+            if snake_rect.colliderect(food_rect):
+                self.food.remove(food_item)
                 self.food_count += 1
-            
-            snake.handle_food_eaten()
-            self.spawn_food()
-            return True
-            
+                
+                # Spawn new food if in sky level to maintain 4 items
+                if self.level_data.get('full_sky', False):
+                    self.spawn_food()
+                else:
+                    # For non-sky levels, spawn a single new food item
+                    self.spawn_food()
+                
+                snake.handle_food_eaten()  # Add this line to handle food streak/power-up
+                return True
+        
         return False
     
     def is_complete(self):
@@ -974,8 +996,8 @@ class BaseLevel:
                     obs.draw_base(surface)  # Draw building base
             
             # 4) Draw food
-            if self.food:
-                self.food.draw(surface)
+            for food_item in self.food:
+                food_item.draw(surface)
                 
             # 5) Draw snake
             self.game.snake.draw(surface)
@@ -991,8 +1013,8 @@ class BaseLevel:
             # Original logic for other biomes
             for obstacle in self.obstacles:
                 obstacle.draw(surface)
-            if self.food:
-                self.food.draw(surface)
+            for food_item in self.food:
+                food_item.draw(surface)
             self.game.snake.draw(surface)
 
         # Draw cutscenes last
@@ -1165,16 +1187,16 @@ class BaseLevel:
                         # Calculate the proposed position from the mountain's center
                         proposed_x = obs.x + obs.width // 2
                         proposed_y = obs.y + obs.height // 2
-                        self.food = Food(proposed_x, proposed_y, EAGLE_CRITTER, self.block_size)
+                        self.food.append(Food(proposed_x, proposed_y, EAGLE_CRITTER, self.block_size))
                         # Adjust eagle food position to ensure it is fully visible on-screen horizontally
                         block = self.block_size // 4  # Used in Food.get_hitbox for eagle
                         eagle_width = block * 8        # Eagle hitbox width in pixels
                         # Snap x position to the grid
-                        new_x = round(self.food.x / self.block_size) * self.block_size
+                        new_x = round(self.food[-1].x / self.block_size) * self.block_size
                         # If the eagle would go off the right side of the screen, clamp new_x
                         if new_x + eagle_width > self.game.width:
                             new_x = (self.game.width - eagle_width) // self.block_size * self.block_size
-                        self.food.x = new_x
+                        self.food[-1].x = new_x
                     
                     # If it's a mountain, dry up any rivers sourced from it
                     if isinstance(obs, MountainPeak):
@@ -1255,7 +1277,7 @@ class BaseLevel:
                     if self.enemy_snake.dy == 0:
                         # Choose vertical direction based on target
                         if self.food:
-                            self.enemy_snake.dy = (self.block_size if self.food.y > self.enemy_snake.y 
+                            self.enemy_snake.dy = (self.block_size if self.food[-1].y > self.enemy_snake.y 
                                                  else -self.block_size)
                 elif will_hit_horizontal_wall:
                     self.enemy_snake.dy = 0  # Stop vertical movement
@@ -1263,7 +1285,7 @@ class BaseLevel:
                     if self.enemy_snake.dx == 0:
                         # Choose horizontal direction based on target
                         if self.food:
-                            self.enemy_snake.dx = (self.block_size if self.food.x > self.enemy_snake.x 
+                            self.enemy_snake.dx = (self.block_size if self.food[-1].x > self.enemy_snake.x 
                                                  else -self.block_size)
                 
                 # Always clamp position
@@ -1513,5 +1535,5 @@ class BaseLevel:
             return False
             
         snake_rect = pygame.Rect(snake.x, snake.y, snake.block_size, snake.block_size)
-        food_rect = self.food.get_hitbox()
+        food_rect = self.food[-1].get_hitbox()
         return snake_rect.colliderect(food_rect) 

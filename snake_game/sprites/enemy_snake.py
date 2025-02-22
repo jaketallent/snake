@@ -44,11 +44,11 @@ class EnemySnake(Snake):
             return
         
         player = self.game.snake
-        food = self.game.current_level.food
+        food_list = self.game.current_level.food
         
-        # If powered up, chase player instead of food
-        target_x = player.x if self.is_powered_up and not player.is_powered_up else (food.x if food else self.x)
-        target_y = player.y if self.is_powered_up and not player.is_powered_up else (food.y if food else self.y)
+        # Get the first food item's position, or use our position if no food
+        target_x = player.x if self.is_powered_up and not player.is_powered_up else (food_list[0].x if food_list else self.x)
+        target_y = player.y if self.is_powered_up and not player.is_powered_up else (food_list[0].y if food_list else self.y)
         
         # If player is powered up and we're not, run away
         dist_to_player = math.hypot(player.x - self.x, player.y - self.y)
