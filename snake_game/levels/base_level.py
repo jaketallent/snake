@@ -724,6 +724,10 @@ class BaseLevel:
         return False
     
     def check_collision(self, snake):
+        # NEW: If the snake is marked as dead, trigger game over immediately.
+        if getattr(snake, 'is_dead', False):
+            return True
+        
         # Don't check collisions if snake is frozen (e.g. during cutscene)
         if getattr(snake, 'frozen', False):
             return False
@@ -1297,10 +1301,10 @@ class BaseLevel:
                 self.enemy_snake.move_to(new_x, new_y)
             
             # Check food collision for enemy snake
-            if self.food and self._check_collision_with_food(self.enemy_snake):
-                self.enemy_snake.grow()
-                self.enemy_snake.handle_food_eaten()
-                self.spawn_food()
+            if self.food:
+                collided = self.check_food_collision(self.enemy_snake)
+                if collided:
+                    self.enemy_snake.grow()
             
             # Check powered-up collision between snakes
             if self.game.snake.is_powered_up or self.enemy_snake.is_powered_up:
@@ -1532,10 +1536,13 @@ class BaseLevel:
                     break  # Stop checking other segments once hit 
 
     def _check_collision_with_food(self, snake):
-        """Check if given snake collides with food"""
+        """Check if given snake collides with any food item"""
         if not self.food:
             return False
             
         snake_rect = pygame.Rect(snake.x, snake.y, snake.block_size, snake.block_size)
-        food_rect = self.food[-1].get_hitbox()
-        return snake_rect.colliderect(food_rect) 
+        # Instead of checking only the last food item, check all food items
+        for food_item in self.food:
+            if snake_rect.colliderect(food_item.get_hitbox()):
+                return True
+        return False 
