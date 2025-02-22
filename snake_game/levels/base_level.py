@@ -957,13 +957,11 @@ class BaseLevel:
                 # Only return True (allowing level advance) if cutscene is done
                 return not self.current_cutscene and self.ending_cutscene_played
         elif self.level_data.get('is_boss', False):
-            # Only consider complete if boss health is 0 AND death animation is finished
+            # For boss levels, wait until the boss finishes its death animation
             if self.boss_health <= 0:
-                # If boss exists and is dying, wait for animation
-                if self.boss and hasattr(self.boss, 'is_dying') and self.boss.is_dying:
-                    return False
-                # Otherwise (boss is None or not dying), level is complete
-                return True
+                # Only mark complete if boss is not actively dying or boss object is gone
+                if not self.boss or not self.boss.is_dying:
+                    return True
             return False
         elif self.level_data['biome'] == 'city':
             return self.buildings_destroyed >= self.required_buildings
