@@ -118,11 +118,13 @@ class BaseLevel:
         
         # Add enemy snakes for sky levels
         self.enemy_snakes = []
-        self.defeated_snakes = 0  # Add this counter
+        self.defeated_snakes = 0
         if level_data.get('full_sky', False):
-            # Create a list to hold multiple enemy snakes
-            for _ in range(3):  # Spawn 3 enemy snakes
+            # Create enemy snakes with different themes
+            themes = ['fire', 'water', 'earth']
+            for theme in themes:
                 enemy_snake = EnemySnake(0, 0, game)
+                enemy_snake.set_theme(theme)
                 self.find_safe_spawn_for_snake(enemy_snake)
                 self.enemy_snakes.append(enemy_snake)
     

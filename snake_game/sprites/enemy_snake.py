@@ -9,11 +9,51 @@ class EnemySnake(Snake):
         self.state = 'seek_food'
         self.decision_timer = 0
         self.decision_delay = 1  # Increase decision frequency
-        self.color = (255, 100, 100)
         self.stuck_timer = 0
         self.last_pos = (x, y)
         self.wall_bounce_cooldown = 0
         
+        # Define elemental themes
+        self.themes = {
+            'fire': {
+                'body_colors': [(255, 100, 0), (255, 50, 0)],  # Orange/Red gradient
+                'power_up_colors': [
+                    (255, 255, 200),  # Bright yellow
+                    (255, 200, 50),   # Golden yellow
+                    (255, 150, 0),    # Orange
+                    (255, 50, 0),     # Red
+                ]
+            },
+            'water': {
+                'body_colors': [(0, 100, 255), (0, 50, 255)],  # Blue gradient
+                'power_up_colors': [
+                    (200, 255, 255),  # Light cyan
+                    (100, 200, 255),  # Sky blue
+                    (0, 150, 255),    # Blue
+                    (0, 100, 255),    # Deep blue
+                ]
+            },
+            'earth': {
+                'body_colors': [(139, 69, 19), (101, 67, 33)],  # Brown gradient
+                'power_up_colors': [
+                    (200, 255, 150),  # Light green
+                    (150, 200, 100),  # Moss green
+                    (139, 69, 19),    # Brown
+                    (101, 67, 33),    # Dark brown
+                ]
+            }
+        }
+        
+        # Theme will be assigned by the level when creating enemy snakes
+        self.theme = None
+        self.color = None  # Will be set when theme is assigned
+
+    def set_theme(self, theme_name):
+        """Set the snake's elemental theme"""
+        if theme_name in self.themes:
+            self.theme = theme_name
+            self.color = self.themes[theme_name]['body_colors'][0]
+
     def update(self):
         if self.is_dead:
             self.death_timer += 1
@@ -67,3 +107,69 @@ class EnemySnake(Snake):
             if new_dy != -self.dy:
                 self.dx = 0
                 self.dy = new_dy
+
+    def draw(self, surface):
+        if self.is_dead:
+            super().draw(surface)  # Use default death animation
+        else:
+            # Draw power-up effect if active
+            if self.is_powered_up:
+                self._draw_themed_power_up_effect(surface)
+            
+            # Draw snake body segments with themed colors
+            for segment in self.body:
+                block = self.block_size // 4
+                for i in range(4):
+                    for j in range(4):
+                        # Use theme colors for shading
+                        if self.is_flashing:
+                            color = self.flash_color
+                        else:
+                            color = (self.themes[self.theme]['body_colors'][1] 
+                                   if (i == 3 or j == 3) 
+                                   else self.themes[self.theme]['body_colors'][0])
+                        
+                        pygame.draw.rect(surface, color,
+                                       [segment[0] + (j * block),
+                                        segment[1] + (i * block),
+                                        block, block])
+            
+            # Update flash effect
+            if self.is_flashing:
+                self.flash_timer -= 1
+                if self.flash_timer <= 0:
+                    self.is_flashing = False
+            
+            # Draw eyes
+            if self.body:
+                self._draw_eyes(surface)
+
+    def _draw_themed_power_up_effect(self, surface):
+        """Draw power-up effect with theme-specific colors"""
+        time = pygame.time.get_ticks()
+        
+        # Draw pixelated energy aura around snake
+        for segment in self.body:
+            block = self.block_size // 4
+            theme_colors = self.themes[self.theme]['power_up_colors']
+            
+            # Inner glow
+            offset = math.sin(time / 100) * 2
+            for i in range(8):
+                angle = (i * math.pi / 4) + (time / 200)
+                for r in range(2, 5):
+                    x = segment[0] + self.block_size/2 + math.cos(angle) * (r * 3 + offset)
+                    y = segment[1] + self.block_size/2 + math.sin(angle) * (r * 3 + offset)
+                    pygame.draw.rect(surface, theme_colors[0],
+                                   [int(x) - block//2, int(y) - block//2,
+                                    block, block])
+            
+            # Outer energy
+            if time % 8 < 4:
+                for i in range(12):
+                    angle = (i * math.pi / 6) + (time / 150)
+                    x = segment[0] + self.block_size/2 + math.cos(angle) * (8 + offset)
+                    y = segment[1] + self.block_size/2 + math.sin(angle) * (8 + offset)
+                    color = theme_colors[1] if i % 2 == 0 else theme_colors[2]
+                    pygame.draw.rect(surface, color,
+                                   [int(x) - 1, int(y) - 1, 2, 2])
