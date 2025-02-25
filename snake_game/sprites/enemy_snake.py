@@ -61,6 +61,17 @@ class EnemySnake(Snake):
             self.move_to(self.x, self.y)
             return None, None  # Return None to indicate no movement
         
+        # Update projectiles
+        for proj in self.projectiles[:]:  # Use slice copy to safely modify while iterating
+            # Update projectile position
+            proj['x'] += proj['dx']
+            proj['y'] += proj['dy']
+            proj['lifetime'] -= 1
+            
+            # Remove projectile if it's too old
+            if proj['lifetime'] <= 0:
+                self.projectiles.remove(proj)
+        
         if (self.x, self.y) == self.last_pos:
             self.stuck_timer += 1
         else:
@@ -72,6 +83,13 @@ class EnemySnake(Snake):
             self.decision_timer = 0
             self._make_decision()
             
+        # Update spit cooldown
+        if not self.can_spit:
+            self.spit_cooldown += 1
+            if self.spit_cooldown >= self.spit_cooldown_time:
+                self.can_spit = True
+                self.spit_cooldown = 0
+        
         return super().update()
     
     def _make_decision(self):
@@ -80,6 +98,27 @@ class EnemySnake(Snake):
         
         player = self.game.snake
         food_list = self.game.current_level.food
+        
+        # Check if we should spit venom
+        if len(self.body) >= 3:  # Only spit if we have 3+ segments
+            # Check if we're lined up horizontally or vertically with player
+            dx = player.x - self.x
+            dy = player.y - self.y
+            
+            # Consider "lined up" if within half a block size
+            aligned_x = abs(dy) < self.block_size/2
+            aligned_y = abs(dx) < self.block_size/2
+            
+            if aligned_x or aligned_y:
+                # Make sure player is in front of us based on our current direction
+                is_in_front = (
+                    (self.dx > 0 and dx > 0) or
+                    (self.dx < 0 and dx < 0) or
+                    (self.dy > 0 and dy > 0) or
+                    (self.dy < 0 and dy < 0)
+                )
+                if is_in_front:
+                    self.spit_venom()
         
         target_x = player.x if self.is_powered_up and not player.is_powered_up else (food_list[0].x if food_list else self.x)
         target_y = player.y if self.is_powered_up and not player.is_powered_up else (food_list[0].y if food_list else self.y)
@@ -115,6 +154,22 @@ class EnemySnake(Snake):
             # Draw power-up effect if active
             if self.is_powered_up:
                 self._draw_themed_power_up_effect(surface)
+            
+            # Draw projectiles with themed colors
+            for proj in self.projectiles:
+                # Use primary theme color for projectile
+                color = self.themes[self.theme]['body_colors'][0]
+                # Draw main projectile body
+                pygame.draw.rect(surface, color,
+                               [proj['x'] - 4, proj['y'] - 4, 8, 8])
+                # Draw glowing trail effect
+                trail_color = self.themes[self.theme]['power_up_colors'][0]  # Use bright theme color
+                for i in range(3):  # Draw 3 trail segments
+                    trail_x = proj['x'] - (proj['dx'] * 0.3 * i)
+                    trail_y = proj['y'] - (proj['dy'] * 0.3 * i)
+                    size = 6 - i * 2  # Trail gets smaller
+                    pygame.draw.rect(surface, trail_color,
+                                   [trail_x - size/2, trail_y - size/2, size, size])
             
             # Draw snake body segments with themed colors
             for segment in self.body:

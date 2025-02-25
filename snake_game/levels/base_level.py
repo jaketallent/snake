@@ -1529,6 +1529,8 @@ class BaseLevel:
                 if proj_rect.colliderect(segment):
                     player.projectiles.remove(proj)
                     enemy.take_snake_damage(1)  # 1 segment damage
+                    enemy.flash_timer = 10
+                    enemy.is_flashing = True
                     if len(enemy.body) <= 1:  # If enemy has no segments left
                         enemy.is_dead = True  # Mark enemy as dead
                     break  # Stop checking other segments once hit
@@ -1545,6 +1547,8 @@ class BaseLevel:
                 if proj_rect.colliderect(segment):
                     enemy.projectiles.remove(proj)
                     player.take_snake_damage(1)  # 1 segment damage
+                    player.flash_timer = 10
+                    player.is_flashing = True
                     break  # Stop checking other segments once hit
 
     def _check_collision_with_food(self, snake):
