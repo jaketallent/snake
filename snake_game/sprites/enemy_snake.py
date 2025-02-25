@@ -17,9 +17,9 @@ class EnemySnake(Snake):
     def update(self):
         if self.is_dead:
             self.death_timer += 1
-            self.y += 2  # Fall speed
+            self.y += 8  # Increase fall speed from 2 to 8
             self.move_to(self.x, self.y)
-            return None, None
+            return None, None  # Return None to indicate no movement
         
         if (self.x, self.y) == self.last_pos:
             self.stuck_timer += 1
