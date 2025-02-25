@@ -575,32 +575,28 @@ class BaseLevel:
         return True
 
     def check_food_collision(self, snake):
-        """
-        Check if the snake collides with any food.
-        If a collision is detected:
-          - Remove the collided food
-          - Call snake.handle_food_eaten() (which maintains the powerup count)
-          - For mountains level (has_target_mountain is True): only increment self.food_count
-            if the food eaten is an eagle.
-          - For all other levels, increment self.food_count normally.
-          - Spawn new food to replace the one eaten.
-        Returns True if a collision occurred.
-        """
+        """Check if the snake collides with any food"""
         snake_rect = pygame.Rect(snake.x, snake.y, snake.block_size, snake.block_size)
         collided = False
-        # Iterate over a copy so removal does not mess up iteration
-        for food_item in self.food[:]:
+        
+        for food_item in self.food[:]:  # Use copy of list to safely remove items
             if snake_rect.colliderect(food_item.get_hitbox()):
                 self.food.remove(food_item)
-                snake.handle_food_eaten()  # maintain snake powerup / food streak logic
+                snake.handle_food_eaten()
+                
                 if self.level_data.get('has_target_mountain', False):
-                    # Only count eagle food on mountains level
                     if food_item.is_eagle:
                         self.food_count += 1
                 else:
                     self.food_count += 1
-                self.spawn_food()   # Ensure food is always available
+                    
+                # Only spawn new food if we haven't completed the level
+                if not self.is_complete():
+                    self.spawn_food()
+                
                 collided = True
+                break  # Exit after first collision
+                
         return collided
 
     def _overlaps_building_top(self, x, y):
@@ -725,16 +721,16 @@ class BaseLevel:
         return False
     
     def check_collision(self, snake):
-        # NEW: If the snake is marked as dead, trigger game over immediately.
-        if getattr(snake, 'is_dead', False):
-            return True
-        
         # Don't check collisions if snake is frozen (e.g. during cutscene)
         if getattr(snake, 'frozen', False):
             return False
         
         # Get updated position
-        new_x, new_y = snake.update()
+        update_result = snake.update()
+        if update_result is None:  # Handle case where update returns None
+            return False
+        
+        new_x, new_y = update_result
         
         # Skip collision checks if boss is dying
         if (self.level_data.get('is_boss', False) and 
@@ -955,13 +951,19 @@ class BaseLevel:
         return False
     
     def is_complete(self):
-        """Check if level is complete based on level type"""
-        if self.level_data.get('full_sky', False):
-            return self.defeated_snakes >= 3  # Victory when all snakes are defeated
-        elif self.level_data.get('is_boss', False):
-            return self.boss_health <= 0
-        elif self.level_data['biome'] == 'city':
-            return self.buildings_destroyed >= self.required_buildings
+        """Check if the level's completion conditions are met"""
+        if self.current_cutscene:  # Don't complete while cutscene is playing
+            return False
+        
+        if self.level_data.get('has_target_mountain', False):
+            # For mountain level, trigger ending when eagle is eaten
+            if self.food_count >= self.required_food and not self.ending_cutscene_played:
+                self.ending_cutscene_played = True
+                self.trigger_cutscene('ending')
+                return False  # Don't complete until cutscene finishes
+            return self.ending_cutscene_played  # Complete after cutscene
+        elif self.level_data.get('full_sky', False):
+            return self.defeated_snakes >= 3
         else:
             return self.food_count >= self.required_food
     
@@ -1369,9 +1371,15 @@ class BaseLevel:
         """Called when cutscene ends and gameplay begins"""
         # Reset snake state when gameplay starts
         self.game.snake.is_sleeping = False
-        self.game.snake.is_angry = False  # Reset angry state
         self.game.snake.emote = None
         self.game.snake.look_at(None)
+        
+        # Set angry state based on level type
+        if (self.level_data.get('has_target_mountain', False) or 
+            self.level_data.get('full_sky', False)):
+            self.game.snake.is_angry = True
+        else:
+            self.game.snake.is_angry = False
         
         # If this is the desert level, snap the snake's position to the grid.
         if self.level_data.get('biome') == 'desert':
@@ -1398,13 +1406,23 @@ class BaseLevel:
                 enemy_snake.set_theme(theme)
                 self.enemy_snakes.append(enemy_snake)
 
+        # If it's the sky level, keep it off forever
+        if self.level_data.get('full_sky', False):
+            self.game.snake.enable_idle_animation = False
+        else:
+            self.game.snake.enable_idle_animation = True
+
     def trigger_cutscene(self, trigger_id):
         if trigger_id in self.cutscenes:
             cutscene_id = self.cutscenes[trigger_id]
             self.game.music_manager.stop_music()
-            # If this is the ending cutscene on a mountain level, freeze the snake
+            # If this is the ending cutscene on a mountain level, freeze the snake and reset animation
             if trigger_id == 'ending' and self.level_data.get('has_target_mountain', False):
-                self.game.snake.frozen = True  # This will prevent the snake from updating its position
+                snake = self.game.snake
+                snake.frozen = True  # This will prevent the snake from updating its position
+                snake.animation_time = 0  # Reset animation timer
+                snake.wobble_offset = 0  # Reset wobble animation
+                snake.update_position = False  # Stop position updates
             self.current_cutscene = BaseCutscene(self.game, cutscene_id)
 
     def _collides_with_no_spawn(self, x, y):

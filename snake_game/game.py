@@ -72,6 +72,12 @@ class Game:
         self.snake.is_sleeping = False
         self.snake.emote = None
         self.snake.look_at(None)
+        self.snake.frozen = False
+        self.snake.animation_time = 0
+        self.snake.wobble_offset = 0
+        self.snake.idle_timer = 0
+        self.snake.enable_idle_animation = False  # Start with it off
+        self.snake.update_position = True  # Re-enable position updates
         
         level_data = LEVELS[level_idx]
         self.current_level = BaseLevel(self, level_data, self.current_time_of_day if keep_time else None)
@@ -82,6 +88,8 @@ class Game:
             # Only start music if we're not retrying and there's no intro cutscene
             if not self.current_level.show_intro:
                 self.current_level.start_gameplay()
+            # Re-enable idle animation once the gameplay actually starts:
+            self.snake.enable_idle_animation = True
     
     def next_level(self):
         if self.current_level_idx + 1 < len(LEVELS):
