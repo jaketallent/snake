@@ -120,13 +120,8 @@ class BaseLevel:
         self.enemy_snakes = []
         self.defeated_snakes = 0
         if level_data.get('full_sky', False):
-            # Create enemy snakes with different themes
-            themes = ['fire', 'water', 'earth']
-            for theme in themes:
-                enemy_snake = EnemySnake(0, 0, game)
-                enemy_snake.set_theme(theme)
-                self.find_safe_spawn_for_snake(enemy_snake)
-                self.enemy_snakes.append(enemy_snake)
+            # Don't spawn enemy snakes here - they'll be created by the cutscene
+            pass
     
     def initialize_obstacles(self):
         if 'obstacle_type' in self.level_data:
@@ -1389,6 +1384,19 @@ class BaseLevel:
             self.level_data['biome'], 
             self.night_music
         )
+
+        # For sky level, create enemy snakes in their cutscene positions
+        if self.level_data.get('full_sky', False) and not self.enemy_snakes:
+            # Create enemy snakes with different themes in their cutscene positions
+            themes_and_positions = [
+                ('fire', (self.game.width//2 - 200, 200)),
+                ('water', (self.game.width//2 + 200, 200)),
+                ('earth', (self.game.width//2, 100))
+            ]
+            for theme, (x, y) in themes_and_positions:
+                enemy_snake = EnemySnake(x, y, self.game)
+                enemy_snake.set_theme(theme)
+                self.enemy_snakes.append(enemy_snake)
 
     def trigger_cutscene(self, trigger_id):
         if trigger_id in self.cutscenes:

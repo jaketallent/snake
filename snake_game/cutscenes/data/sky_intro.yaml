@@ -2,6 +2,21 @@ sprites:
   snake_god:
     type: snake_god
     position: [center_x, 150]
+  enemy_fire:
+    type: enemy_snake
+    position: [center_x - 200, 200]
+    theme: fire
+    game: true
+  enemy_water:
+    type: enemy_snake
+    position: [center_x + 200, 200]
+    theme: water
+    game: true
+  enemy_earth:
+    type: enemy_snake
+    position: [center_x, 100]
+    theme: earth
+    game: true
 
 snake:
   position: [center_x, center_y]
@@ -9,13 +24,49 @@ snake:
     sleeping: false
     length: 1
 
-sequence:
-  - type: dialogue
-    text: "A new challenge awaits in the sky..."
-    speaker: snake_god
+sequence: 
+  - type: action
+    duration: 60
+    actions:
+      - [snake_look_at, enemy_fire]
+      - [snake_angry, true]
+    focus: enemy_fire
   
   - type: dialogue
-    text: "I'm ready for anything!"
+    text: "Did you think yourself our god's only champion?"
+    focus: enemy_fire
+
+  - type: dialogue
+    text: "If it is revenge you seek, first you must face us, Serpent of Storm."
+    focus: enemy_fire
+
+  - type: dialogue
+    text: "I, the Serpent of Fire, burning with rage..."
+    focus: enemy_fire
+  
+  - type: action
+    duration: 60
+    actions:
+      - [snake_look_at, enemy_water]
+    focus: enemy_water
+  
+  - type: dialogue
+    text: "I, The Serpent of Water, flowing with grace..."
+    focus: enemy_water
+  
+  - type: action
+    duration: 60
+    actions:
+      - [snake_look_at, enemy_earth]
+    focus: enemy_earth
+  
+  - type: dialogue
+    text: "And I, the Serpent of Earth, unyielding as stone."
+    focus: enemy_earth
+  
+  - type: dialogue
+    text: "None shall stop my vengeance."
+    focus: snake
   
   - type: action
     duration: 60

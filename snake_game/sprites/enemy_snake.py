@@ -47,6 +47,10 @@ class EnemySnake(Snake):
         # Theme will be assigned by the level when creating enemy snakes
         self.theme = None
         self.color = None  # Will be set when theme is assigned
+        
+        # Add focus state for cutscenes
+        self.focus_state = 0
+        self.base_alpha = 255
 
     def set_theme(self, theme_name):
         """Set the snake's elemental theme"""
@@ -151,43 +155,56 @@ class EnemySnake(Snake):
         if self.is_dead:
             super().draw(surface)  # Use default death animation
         else:
+            # Get alpha value from cutscene focus system
+            snake_alpha = getattr(self, 'alpha', 255)
+            
+            # Adjust brightness based on focus state - now scales from dimmer to normal
+            brightness_adjust = int(self.focus_state * 70) - 70  # -70 when unfocused, 0 when focused
+            
             # Draw power-up effect if active
             if self.is_powered_up:
-                self._draw_themed_power_up_effect(surface)
+                self._draw_themed_power_up_effect(surface, brightness_adjust)
             
             # Draw projectiles with themed colors
             for proj in self.projectiles:
                 # Use primary theme color for projectile
-                color = self.themes[self.theme]['body_colors'][0]
-                # Draw main projectile body
-                pygame.draw.rect(surface, color,
-                               [proj['x'] - 4, proj['y'] - 4, 8, 8])
-                # Draw glowing trail effect
-                trail_color = self.themes[self.theme]['power_up_colors'][0]  # Use bright theme color
-                for i in range(3):  # Draw 3 trail segments
-                    trail_x = proj['x'] - (proj['dx'] * 0.3 * i)
-                    trail_y = proj['y'] - (proj['dy'] * 0.3 * i)
-                    size = 6 - i * 2  # Trail gets smaller
-                    pygame.draw.rect(surface, trail_color,
-                                   [trail_x - size/2, trail_y - size/2, size, size])
+                base_color = self.themes[self.theme]['body_colors'][0]
+                # Adjust color brightness (dim when unfocused, normal when focused)
+                color = tuple(max(0, min(255, c + brightness_adjust)) for c in base_color)
+                
+                if snake_alpha < 255:
+                    temp_surf = pygame.Surface((8, 8), pygame.SRCALPHA)
+                    temp_color = (*color, snake_alpha)
+                    pygame.draw.rect(temp_surf, temp_color, [0, 0, 8, 8])
+                    surface.blit(temp_surf, (proj['x'] - 4, proj['y'] - 4))
+                else:
+                    pygame.draw.rect(surface, color,
+                                   [proj['x'] - 4, proj['y'] - 4, 8, 8])
             
             # Draw snake body segments with themed colors
             for segment in self.body:
                 block = self.block_size // 4
                 for i in range(4):
                     for j in range(4):
-                        # Use theme colors for shading
                         if self.is_flashing:
-                            color = self.flash_color
+                            base_color = self.flash_color
                         else:
-                            color = (self.themes[self.theme]['body_colors'][1] 
-                                   if (i == 3 or j == 3) 
-                                   else self.themes[self.theme]['body_colors'][0])
+                            base_color = (self.themes[self.theme]['body_colors'][1] 
+                                        if (i + j) % 2 == 0 
+                                        else self.themes[self.theme]['body_colors'][0])
+                        # Adjust color brightness (dim when unfocused, normal when focused)
+                        color = tuple(max(0, min(255, c + brightness_adjust)) for c in base_color)
                         
-                        pygame.draw.rect(surface, color,
-                                       [segment[0] + (j * block),
-                                        segment[1] + (i * block),
-                                        block, block])
+                        if snake_alpha < 255:
+                            temp_surf = pygame.Surface((block, block), pygame.SRCALPHA)
+                            temp_color = (*color, snake_alpha)
+                            temp_surf.fill(temp_color)
+                            surface.blit(temp_surf, (segment[0] + i*block, segment[1] + j*block))
+                        else:
+                            pygame.draw.rect(surface, color,
+                                           [segment[0] + i*block, 
+                                            segment[1] + j*block, 
+                                            block, block])
             
             # Update flash effect
             if self.is_flashing:
@@ -199,7 +216,7 @@ class EnemySnake(Snake):
             if self.body:
                 self._draw_eyes(surface)
 
-    def _draw_themed_power_up_effect(self, surface):
+    def _draw_themed_power_up_effect(self, surface, brightness_adjust):
         """Draw power-up effect with theme-specific colors"""
         time = pygame.time.get_ticks()
         
@@ -215,7 +232,7 @@ class EnemySnake(Snake):
                 for r in range(2, 5):
                     x = segment[0] + self.block_size/2 + math.cos(angle) * (r * 3 + offset)
                     y = segment[1] + self.block_size/2 + math.sin(angle) * (r * 3 + offset)
-                    pygame.draw.rect(surface, theme_colors[0],
+                    pygame.draw.rect(surface, tuple(max(0, min(255, c + brightness_adjust)) for c in theme_colors[0]),
                                    [int(x) - block//2, int(y) - block//2,
                                     block, block])
             
@@ -226,5 +243,5 @@ class EnemySnake(Snake):
                     x = segment[0] + self.block_size/2 + math.cos(angle) * (8 + offset)
                     y = segment[1] + self.block_size/2 + math.sin(angle) * (8 + offset)
                     color = theme_colors[1] if i % 2 == 0 else theme_colors[2]
-                    pygame.draw.rect(surface, color,
+                    pygame.draw.rect(surface, tuple(max(0, min(255, c + brightness_adjust)) for c in color),
                                    [int(x) - 1, int(y) - 1, 2, 2])
