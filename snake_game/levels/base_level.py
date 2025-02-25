@@ -984,14 +984,14 @@ class BaseLevel:
 
             # 3) Draw all bases first
             for obs in buildings_and_mountains:
-                if isinstance(obs, MountainPeak):
+                if isinstance(obs, (MountainPeak, Building)):
                     if obs.is_being_destroyed:
-                        # Let the mountain handle its own destruction animation
-                        obs.draw(surface)
+                        # NEW: Call obs.draw to show the destruction effect
+                        obs.draw(surface)  
                     else:
                         obs.draw_base(surface)
                 else:
-                    obs.draw_base(surface)  # Draw building base
+                    obs.draw_base(surface)
             
             # 4) Draw food
             for food_item in self.food:
@@ -1002,11 +1002,12 @@ class BaseLevel:
             
             # 6) Draw all tops last (so they appear over the snake)
             for obs in buildings_and_mountains:
-                if not obs.is_being_destroyed:  # Skip if being destroyed
-                    if isinstance(obs, MountainPeak):
+                # Skip top if obstacle is being destroyed (because we're drawing the explosion instead)
+                if not obs.is_being_destroyed:
+                    if isinstance(obs, (MountainPeak, Building)):
                         obs.draw_top(surface)
                     else:
-                        obs.draw_top(surface)  # Draw building top
+                        obs.draw_top(surface)
         else:
             # Original logic for other biomes
             for obstacle in self.obstacles:
@@ -1176,55 +1177,57 @@ class BaseLevel:
                 if self.boss_health <= 0 and not hasattr(self.boss, 'is_dying'):
                     self.boss.start_death_animation()
 
-        # Update all obstacles
-        for obs in self.obstacles[:]:  # iterate over a copy, so we can remove
-            if obs.update_destruction():
-                if obs.is_being_destroyed and obs.can_be_destroyed:
-                    # If this is the target mountain, spawn the eagle
-                    if obs == self.target_mountain and not self.eagle_spawned:
-                        self.eagle_spawned = True
-                        # Calculate the proposed position from the mountain's center
-                        proposed_x = obs.x + obs.width // 2
-                        proposed_y = obs.y + obs.height // 2
-                        self.food.append(Food(proposed_x, proposed_y, EAGLE_CRITTER, self.block_size))
-                        # Adjust eagle food position to ensure it is fully visible on-screen horizontally
-                        block = self.block_size // 4  # Used in Food.get_hitbox for eagle
-                        eagle_width = block * 8        # Eagle hitbox width in pixels
-                        # Snap x position to the grid
-                        new_x = round(self.food[-1].x / self.block_size) * self.block_size
-                        # If the eagle would go off the right side of the screen, clamp new_x
-                        if new_x + eagle_width > self.game.width:
-                            new_x = (self.game.width - eagle_width) // self.block_size * self.block_size
-                        self.food[-1].x = new_x
-                    
-                    # If it's a mountain, dry up any rivers sourced from it
-                    if isinstance(obs, MountainPeak):
-                        for river in self.obstacles:
-                            if isinstance(river, River) and river.source_mountain == obs:
-                                river.start_drying()
-                    
-                    # If it's a building in the city, spawn rubble and increment counter
-                    if isinstance(obs, Building) and self.level_data['biome'] == 'city':
+        # Ensure destruction animations get updated each frame
+        for obstacle in self.obstacles[:]:
+            if obstacle.is_being_destroyed or obstacle.is_discharging:
+                # Update destruction/discharge timer
+                destruction_complete = obstacle.update_destruction()
+                if destruction_complete:
+                    # Handle special cases before removing
+                    if isinstance(obstacle, Building) and self.level_data['biome'] == 'city':
                         self.buildings_destroyed += 1
                         # Create rubble with same dimensions as building
                         new_rubble = Rubble(
-                            obs.x,
-                            obs.y,
+                            obstacle.x,
+                            obstacle.y,
                             {
                                 'variant': random.choice([1, 2, 3]),
-                                'width': obs.variations['width'],
-                                'height': obs.variations['height'],
-                                'base_height': obs.base_height
+                                'width': obstacle.variations['width'],
+                                'height': obstacle.variations['height'],
+                                'base_height': obstacle.base_height
                             },
-                            obs.block_size
+                            obstacle.block_size
                         )
                         self.obstacles.append(new_rubble)
+                    elif isinstance(obstacle, MountainPeak):
+                        # If this is the target mountain, spawn the eagle
+                        if obstacle == self.target_mountain and not self.eagle_spawned:
+                            self.eagle_spawned = True
+                            # Calculate the proposed position from the mountain's center
+                            proposed_x = obstacle.x + obstacle.width // 2
+                            proposed_y = obstacle.y + obstacle.height // 2
+                            self.food.append(Food(proposed_x, proposed_y, EAGLE_CRITTER, self.block_size))
+                            # Adjust eagle food position to ensure it is fully visible on-screen horizontally
+                            block = self.block_size // 4  # Used in Food.get_hitbox for eagle
+                            eagle_width = block * 8        # Eagle hitbox width in pixels
+                            # Snap x position to the grid
+                            new_x = round(self.food[-1].x / self.block_size) * self.block_size
+                            # If the eagle would go off the right side of the screen, clamp new_x
+                            if new_x + eagle_width > self.game.width:
+                                new_x = (self.game.width - eagle_width) // self.block_size * self.block_size
+                            self.food[-1].x = new_x
+                        
+                        # Dry up connected rivers
+                        for river in self.obstacles:
+                            if isinstance(river, River) and river.source_mountain == obstacle:
+                                river.start_drying()
                     
-                    # Remove the destroyed obstacle from the list
-                    self.obstacles.remove(obs)
+                    # Remove the destroyed obstacle
+                    self.obstacles.remove(obstacle)
             
-            # Handle river drying animation
-            elif isinstance(obs, River) and obs.drying_up:
+        # Handle river drying animation separately
+        for obs in self.obstacles[:]:
+            if isinstance(obs, River) and obs.drying_up:
                 obs.dry_timer += 1
                 if obs.dry_timer >= obs.dry_duration:
                     self.obstacles.remove(obs)
