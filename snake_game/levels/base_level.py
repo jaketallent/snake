@@ -1404,9 +1404,11 @@ class BaseLevel:
             self.night_music
         )
 
-        # For sky level, create enemy snakes in their cutscene positions
-        if self.level_data.get('full_sky', False) and not self.enemy_snakes:
-            # Create enemy snakes with different themes in their cutscene positions
+        # For sky level, create (or recreate) enemy snakes in their cutscene positions
+        if self.level_data.get('full_sky', False):
+            # Remove any old enemy snakes
+            self.enemy_snakes = []
+            # Now always spawn the three themed enemies
             themes_and_positions = [
                 ('fire', (self.game.width//2 - 200, 200)),
                 ('water', (self.game.width//2 + 200, 200)),
@@ -1416,7 +1418,7 @@ class BaseLevel:
                 enemy_snake = EnemySnake(x, y, self.game)
                 enemy_snake.set_theme(theme)
                 self.enemy_snakes.append(enemy_snake)
-
+        
         # If it's the sky level, keep it off forever
         if self.level_data.get('full_sky', False):
             self.game.snake.enable_idle_animation = False
@@ -1543,7 +1545,6 @@ class BaseLevel:
                     elif player.is_powered_up:
                         enemy.take_snake_damage(SNAKE_DAMAGE)
                         enemy.is_dead = True  # Make sure enemy is marked as dead
-                        player.is_powered_up = False
                     # If only enemy powered up, player takes damage
                     elif enemy.is_powered_up:
                         player.take_snake_damage(SNAKE_DAMAGE)

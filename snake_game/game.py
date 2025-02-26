@@ -97,6 +97,9 @@ class Game:
                 self.current_level.start_gameplay()
             # Re-enable idle animation once the gameplay actually starts:
             self.snake.enable_idle_animation = True
+        else:
+            # ADDED: Force the level to start gameplay again for sky level enemies to spawn
+            self.current_level.start_gameplay()
     
     def next_level(self):
         if self.current_level_idx + 1 < len(LEVELS):
