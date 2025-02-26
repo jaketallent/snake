@@ -40,6 +40,7 @@ class Snake:
         self.ascension_timer = 0
         self.ascension_shake_intensity = 0
         self.original_y = 0  # Store original y position for ascension
+        self.dy = 0
         
     def reset(self, x, y):
         # Snap the provided coordinates to the nearest grid position
@@ -48,7 +49,6 @@ class Snake:
         self.x = x
         self.y = y
         self.dx = 0
-        self.dy = 0
         self.body = []
         self.length = 1
         self.wall_bounce_cooldown = 0

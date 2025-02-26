@@ -79,6 +79,13 @@ class Game:
         self.snake.enable_idle_animation = False  # Start with it off
         self.snake.update_position = True  # Re-enable position updates
         
+        # Reset ascension state
+        if hasattr(self.snake, 'is_ascending'):
+            self.snake.is_ascending = False
+            self.snake.ascension_timer = 0
+            self.snake.ascension_shake_intensity = 0
+            self.snake.dy = 0
+        
         level_data = LEVELS[level_idx]
         self.current_level = BaseLevel(self, level_data, self.current_time_of_day if keep_time else None)
         self.current_level_idx = level_idx

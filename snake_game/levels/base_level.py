@@ -1374,6 +1374,13 @@ class BaseLevel:
         self.game.snake.emote = None
         self.game.snake.look_at(None)
         
+        # Reset ascension state if it exists
+        if hasattr(self.game.snake, 'is_ascending'):
+            self.game.snake.is_ascending = False
+            self.game.snake.ascension_timer = 0
+            self.game.snake.ascension_shake_intensity = 0
+            self.game.snake.dy = 0
+        
         # Set angry state based on level type
         if (self.level_data.get('has_target_mountain', False) or 
             self.level_data.get('full_sky', False)):
