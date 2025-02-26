@@ -16,7 +16,7 @@ class EnemySnake(Snake):
         # Define elemental themes
         self.themes = {
             'fire': {
-                'body_colors': [(255, 100, 0), (255, 50, 0)],  # Orange/Red gradient
+                'body_colors': [(255, 120, 40), (200, 60, 0)],  # Bright orange with darker orange-red edges
                 'power_up_colors': [
                     (255, 255, 200),  # Bright yellow
                     (255, 200, 50),   # Golden yellow
@@ -25,7 +25,7 @@ class EnemySnake(Snake):
                 ]
             },
             'water': {
-                'body_colors': [(0, 100, 255), (0, 50, 255)],  # Blue gradient
+                'body_colors': [(40, 130, 255), (0, 70, 200)],  # Brighter blue with darker blue edges
                 'power_up_colors': [
                     (200, 255, 255),  # Light cyan
                     (100, 200, 255),  # Sky blue
@@ -34,7 +34,7 @@ class EnemySnake(Snake):
                 ]
             },
             'earth': {
-                'body_colors': [(139, 69, 19), (101, 67, 33)],  # Brown gradient
+                'body_colors': [(150, 90, 40), (110, 70, 30)],  # Medium brown with darker brown edges
                 'power_up_colors': [
                     (200, 255, 150),  # Light green
                     (150, 200, 100),  # Moss green
@@ -181,7 +181,7 @@ class EnemySnake(Snake):
                     pygame.draw.rect(surface, color,
                                    [proj['x'] - 4, proj['y'] - 4, 8, 8])
             
-            # Draw snake body segments with themed colors
+            # Draw snake body segments with themed colors - UPDATED to match player snake pattern
             for segment in self.body:
                 block = self.block_size // 4
                 for i in range(4):
@@ -189,8 +189,9 @@ class EnemySnake(Snake):
                         if self.is_flashing:
                             base_color = self.flash_color
                         else:
+                            # Use edge shading like player snake instead of checkerboard
                             base_color = (self.themes[self.theme]['body_colors'][1] 
-                                        if (i + j) % 2 == 0 
+                                        if (i == 3 or j == 3)  # Darker color on edges
                                         else self.themes[self.theme]['body_colors'][0])
                         # Adjust color brightness (dim when unfocused, normal when focused)
                         color = tuple(max(0, min(255, c + brightness_adjust)) for c in base_color)
@@ -199,11 +200,11 @@ class EnemySnake(Snake):
                             temp_surf = pygame.Surface((block, block), pygame.SRCALPHA)
                             temp_color = (*color, snake_alpha)
                             temp_surf.fill(temp_color)
-                            surface.blit(temp_surf, (segment[0] + i*block, segment[1] + j*block))
+                            surface.blit(temp_surf, (segment[0] + j*block, segment[1] + i*block))
                         else:
                             pygame.draw.rect(surface, color,
-                                           [segment[0] + i*block, 
-                                            segment[1] + j*block, 
+                                           [segment[0] + j*block, 
+                                            segment[1] + i*block, 
                                             block, block])
             
             # Update flash effect
