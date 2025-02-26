@@ -955,21 +955,20 @@ class BaseLevel:
         return False
     
     def is_complete(self):
-        """Check if the level's completion conditions are met"""
-        if self.current_cutscene:  # Don't complete while cutscene is playing
-            return False
+        # For city (non-boss) levels, use buildings_destroyed rather than food_count
+        if self.level_data['biome'] == 'city' and not self.level_data.get('is_boss', False):
+            return self.buildings_destroyed >= self.required_buildings
         
+        # For mountain levels that require eagle or other special conditions
         if self.level_data.get('has_target_mountain', False):
-            # For mountain level, trigger ending when eagle is eaten
-            if self.food_count >= self.required_food and not self.ending_cutscene_played:
-                self.ending_cutscene_played = True
-                self.trigger_cutscene('ending')
-                return False  # Don't complete until cutscene finishes
-            return self.ending_cutscene_played  # Complete after cutscene
-        elif self.level_data.get('full_sky', False):
-            return self.defeated_snakes >= 3
-        else:
             return self.food_count >= self.required_food
+        
+        # For sky levels (full_sky), check if defeated_snakes >= 3
+        if self.level_data.get('full_sky', False):
+            return self.defeated_snakes >= 3
+        
+        # For all other levels, use food_count >= required_food
+        return self.food_count >= self.required_food
     
     def draw(self, surface):
         # Draw background
