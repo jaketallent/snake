@@ -948,6 +948,10 @@ class BaseLevel:
             snake.die()
             return True
         
+        # Return True if snake died during this update (from any cause)
+        if snake.is_dead:
+            return True
+        
         return False
     
     def is_complete(self):
