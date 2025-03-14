@@ -200,15 +200,15 @@ TIMES_OF_DAY = {
                 (135, 206, 250),  # Light sky blue
                 (176, 226, 255)   # Pale sky blue
             ],
-            'cloud_color': (255, 255, 255),  # Pure white clouds
+            'cloud_color': (255, 255, 255),
             'is_night': False
         },
         'sunset': {
             'sky_colors': [
-                (255, 180, 140),  # Warm sunset orange
-                (255, 220, 180)   # Light sunset orange
+                (255, 180, 140),  # Warm sunset
+                (255, 220, 180)   # Light sunset
             ],
-            'cloud_color': (255, 230, 210),  # Sunset-tinted clouds
+            'cloud_color': (255, 230, 210),
             'is_night': False
         },
         'night': {
@@ -216,7 +216,7 @@ TIMES_OF_DAY = {
                 (15, 15, 45),     # Deep night sky
                 (35, 35, 75)      # Lighter night sky
             ],
-            'cloud_color': (70, 70, 90),  # Dark night clouds
+            'cloud_color': (70, 70, 90),
             'is_night': True
         }
     },
@@ -272,30 +272,15 @@ TIMES_OF_DAY = {
             'is_night': True
         }
     },
-    'sky': {
-        'day': {
+    'space': {
+        'space': {
             'sky_colors': [
-                (135, 206, 250),  # Light sky blue
-                (176, 226, 255)   # Pale sky blue
+                (20, 24, 82),     # Dark blue space
+                (10, 12, 40)      # Darker blue space
             ],
-            'cloud_color': (255, 255, 255),
-            'is_night': False
-        },
-        'sunset': {
-            'sky_colors': [
-                (255, 180, 140),  # Warm sunset
-                (255, 220, 180)   # Light sunset
-            ],
-            'cloud_color': (255, 230, 210),
-            'is_night': False
-        },
-        'night': {
-            'sky_colors': [
-                (15, 15, 45),     # Deep night sky
-                (35, 35, 75)      # Lighter night sky
-            ],
-            'cloud_color': (70, 70, 90),
-            'is_night': True
+            'cloud_color': (0, 0, 0),  # No clouds in space
+            'is_night': True,
+            'is_space': True
         }
     }
 }
@@ -514,5 +499,19 @@ LEVELS = [
             'intro': 'sky_intro',
             'ending': 'sky_ending'
         }
+    },
+    {
+        'name': 'Space',
+        'biome': 'space',
+        'background_colors': {
+            'sky_colors': [(20, 24, 82), (10, 12, 40)]  # Dark blue space colors
+        },
+        'obstacles': [],  # No obstacles in space level initially
+        'critters': SKY_CRITTERS,  # Reusing sky critters for now
+        'required_food': 8,  # Same food requirement as sky
+        'play_area': {'top': 0, 'bottom': 600},  # Full screen play area
+        'full_sky': True,  # Full screen background
+        'is_space': True,  # New flag to indicate this is a space level
+        'cutscenes': {}  # No cutscenes yet
     }
 ] 

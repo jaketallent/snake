@@ -138,6 +138,7 @@ class SkyManager:
         self.top = top
         self.sky_theme = sky_theme
         self.full_sky = full_sky
+        self.is_space = sky_theme.get('is_space', False)
         
         # Randomize celestial body position
         self.celestial_x = random.randint(width // 4, 3 * width // 4)  # Between 25-75% of width
@@ -157,7 +158,7 @@ class SkyManager:
         self.clouds = []
         self.stars = []
         self.init_clouds()
-        if sky_theme.get('is_night', False):
+        if sky_theme.get('is_night', False) or self.is_space:
             self.init_stars()
         
         # Create gradient surface
@@ -167,17 +168,20 @@ class SkyManager:
         # Draw sky gradient
         surface.blit(self.sky_surface, (0, self.top))
         
-        # Draw stars if it's night
-        if self.sky_theme.get('is_night', False):
+        # Draw stars if it's night or space
+        if self.sky_theme.get('is_night', False) or self.is_space:
             for star in self.stars:
                 star.draw(surface, pygame.time.get_ticks() / 1000)
         
         # Draw the sun or moon using original pixel art style
-        self.celestial_body.draw(surface)
+        # Don't draw celestial body in space level
+        if not self.is_space:
+            self.celestial_body.draw(surface)
         
-        # Draw clouds
-        for cloud in self.clouds:
-            cloud.draw(surface)
+        # Draw clouds (not in space)
+        if not self.is_space:
+            for cloud in self.clouds:
+                cloud.draw(surface)
     
     def init_clouds(self):
         """Initialize cloud objects"""

@@ -32,13 +32,25 @@ class BaseLevel:
         
         # Create sky manager first so we can use it to determine play area
         biome = level_data['biome']
-        if time_of_day is None:
-            time_options = list(TIMES_OF_DAY[biome].keys())
-            self.current_time = random.choice(time_options)
-        else:
-            self.current_time = time_of_day
         
-        sky_theme = TIMES_OF_DAY[biome][self.current_time]
+        # For space level, use a special time of day
+        if biome == 'space':
+            self.current_time = 'space'
+            # Add is_space flag to sky_theme
+            sky_theme = {
+                'sky_colors': level_data['background_colors']['sky_colors'],
+                'is_space': True
+            }
+        else:
+            # Normal time of day handling for other biomes
+            if time_of_day is None:
+                time_options = list(TIMES_OF_DAY[biome].keys())
+                self.current_time = random.choice(time_options)
+            else:
+                self.current_time = time_of_day
+            
+            sky_theme = TIMES_OF_DAY[biome][self.current_time]
+        
         self.sky_manager = SkyManager(
             game.width, 
             game.height, 
@@ -70,7 +82,9 @@ class BaseLevel:
         is_night = self.current_time in ['night', 'sunset']
         self.night_music = is_night
         
-        self.level_data['name'] = f"{level_data['name']} ({self.current_time.title()})"
+        # Update level name with time of day (except for space)
+        if biome != 'space':
+            self.level_data['name'] = f"{level_data['name']} ({self.current_time.title()})"
         
         self.building_positions = None
         self.park_positions = None
@@ -1073,6 +1087,29 @@ class BaseLevel:
     def draw_background(self, surface):
         # Draw sky using sky manager
         self.sky_manager.draw(surface)
+        
+        # For space level, draw stars like in the main menu
+        if self.level_data.get('is_space', False):
+            # Draw stars with twinkling effect (using game's stars)
+            time = pygame.time.get_ticks() / 1000
+            for star in self.game.stars:
+                brightness = (math.sin(time * 2 + star['twinkle_offset']) + 1) * 0.5
+                color = tuple(int(255 * brightness) for _ in range(3))
+                pygame.draw.rect(surface, color,
+                               [star['x'], star['y'], star['size'], star['size']])
+                
+            # Add shooting stars less frequently
+            if random.random() < 0.005:
+                start_x = random.randint(0, self.game.width)
+                start_y = random.randint(0, self.game.height // 2)
+                for i in range(10):
+                    x = start_x + i * 4
+                    y = start_y + i * 4
+                    size = 3 - (i // 4)
+                    if size > 0:
+                        pygame.draw.rect(surface, (255, 255, 255),
+                                       [x, y, size, size])
+            return
         
         # Special handling for different biomes
         if self.level_data['biome'] == 'mountain':
