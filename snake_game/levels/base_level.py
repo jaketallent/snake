@@ -955,17 +955,53 @@ class BaseLevel:
         return False
     
     def is_complete(self):
+        # For boss levels, check if boss is defeated and death animation is complete
+        if self.level_data.get('is_boss', False):
+            # If boss is still present and not dying, level is not complete
+            if self.boss and not hasattr(self.boss, 'is_dying'):
+                return False
+            # If boss is dying but death animation is not complete, level is not complete
+            if self.boss and hasattr(self.boss, 'is_dying') and self.boss.is_dying:
+                return False
+            # If boss is None (removed after death animation), level is complete
+            if self.boss is None:
+                return True
+            return False
+
         # For city (non-boss) levels, use buildings_destroyed rather than food_count
         if self.level_data['biome'] == 'city' and not self.level_data.get('is_boss', False):
             return self.buildings_destroyed >= self.required_buildings
         
         # For mountain levels that require eagle or other special conditions
         if self.level_data.get('has_target_mountain', False):
-            return self.food_count >= self.required_food
+            # Check if we've collected the eagle
+            if self.food_count >= self.required_food:
+                # If we have the eagle but haven't played the ending cutscene yet
+                if not self.ending_cutscene_played and 'ending' in self.cutscenes and not self.current_cutscene:
+                    self.ending_cutscene_played = True
+                    self.trigger_cutscene('ending')
+                    return False  # Don't complete level until cutscene has played
+                elif self.current_cutscene:
+                    return False  # Don't complete level while cutscene is playing
+                else:
+                    return True   # Complete level after cutscene has finished
+            return False  # Haven't collected the eagle yet
         
-        # For sky levels (full_sky), check if defeated_snakes >= 3
+        # For sky levels (full_sky), check if defeated_snakes >= 3 AND ending cutscene has played
         if self.level_data.get('full_sky', False):
-            return self.defeated_snakes >= 3
+            # Only return true if the ending cutscene has been triggered and completed
+            if self.defeated_snakes >= 3:
+                if not self.ending_cutscene_played:
+                    # If snakes are defeated but cutscene hasn't played, trigger it
+                    if 'ending' in self.cutscenes and not self.current_cutscene:
+                        self.ending_cutscene_played = True
+                        self.trigger_cutscene('ending')
+                    return False  # Don't complete level until cutscene has played
+                elif self.current_cutscene:
+                    return False  # Don't complete level while cutscene is playing
+                else:
+                    return True   # Complete level after cutscene has finished
+            return False  # Not enough snakes defeated
         
         # For all other levels, use food_count >= required_food
         return self.food_count >= self.required_food
@@ -1428,8 +1464,8 @@ class BaseLevel:
         if trigger_id in self.cutscenes:
             cutscene_id = self.cutscenes[trigger_id]
             self.game.music_manager.stop_music()
-            # If this is the ending cutscene on a mountain level, freeze the snake and reset animation
-            if trigger_id == 'ending' and self.level_data.get('has_target_mountain', False):
+            # If this is the ending cutscene on a mountain level or sky level, freeze the snake and reset animation
+            if trigger_id == 'ending' and (self.level_data.get('has_target_mountain', False) or self.level_data.get('full_sky', False)):
                 snake = self.game.snake
                 snake.frozen = True  # This will prevent the snake from updating its position
                 snake.animation_time = 0  # Reset animation timer
@@ -1539,11 +1575,15 @@ class BaseLevel:
                         player.take_snake_damage(SNAKE_DAMAGE)
                         enemy.take_snake_damage(SNAKE_DAMAGE)
                         player.is_powered_up = False
+                        player.power_up_timer = 0  # Reset timer
                         enemy.is_powered_up = False
                     # If only player powered up, enemy takes damage and dies
                     elif player.is_powered_up:
                         enemy.take_snake_damage(SNAKE_DAMAGE)
                         enemy.is_dead = True  # Make sure enemy is marked as dead
+                        # Explicitly consume the power-up
+                        player.is_powered_up = False
+                        player.power_up_timer = 0  # Reset timer
                     # If only enemy powered up, player takes damage
                     elif enemy.is_powered_up:
                         player.take_snake_damage(SNAKE_DAMAGE)

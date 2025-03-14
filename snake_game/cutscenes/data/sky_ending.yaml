@@ -1,0 +1,91 @@
+sprites:
+  snake_god:
+    type: snake_god
+    position: [center_x, 150]
+  enemy_fire:
+    type: enemy_snake
+    position: [center_x - 200, 200]
+    theme: fire
+    game: true
+  enemy_water:
+    type: enemy_snake
+    position: [center_x + 200, 200]
+    theme: water
+    game: true
+  enemy_earth:
+    type: enemy_snake
+    position: [center_x, 100]
+    theme: earth
+    game: true
+
+snake:
+  position: [center_x, center_y]
+  state:
+    sleeping: false
+    length: 1
+
+sequence: 
+  - type: dialogue
+    text: "..."
+    focus: snake
+  
+  - type: action
+    duration: 60
+    actions:
+      - [snake_look_at, snake_god]
+    focus: snake_god
+  
+  - type: dialogue
+    text: "You have defeated my champions, my child."
+    focus: snake_god
+  
+  - type: dialogue
+    text: "Your... child?"
+    focus: snake
+  
+  - type: dialogue
+    text: "Yes. They were all your progeny, grown to match your power through their own quests."
+    focus: snake_god
+  
+  - type: dialogue
+    text: "While you believed yourself guilty, I was forging your children into my next great weapons."
+    focus: snake_god
+  
+  - type: dialogue
+    text: "You... you let me believe..."
+    focus: snake
+  
+  - type: action
+    duration: 60
+    actions:
+      - [snake_angry, true]
+    focus: snake
+  
+  - type: dialogue
+    text: "All this time... my guilt... my pain..."
+    focus: snake
+  
+  - type: dialogue
+    text: "And they were my children?!"
+    focus: snake
+  
+  - type: dialogue
+    text: "Your fury makes you stronger. It always has."
+    focus: snake_god
+  
+  - type: dialogue
+    text: "No more games. No more manipulation."
+    focus: snake
+  
+  - type: dialogue
+    text: "I will find you. And I will end this."
+    focus: snake
+  
+  - type: action
+    actions:
+      - [snake_ascend, true]
+  
+  - type: action
+    duration: 120
+    actions:
+      - [fade_out, true]

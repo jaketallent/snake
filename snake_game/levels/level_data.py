@@ -511,7 +511,8 @@ LEVELS = [
         'play_area': {'top': 50, 'bottom': 550},  # Expanded play area
         'full_sky': True,  # Indicates this is a full sky level
         'cutscenes': {
-            'intro': 'sky_intro'
+            'intro': 'sky_intro',
+            'ending': 'sky_ending'
         }
     }
 ] 
