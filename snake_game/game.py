@@ -333,7 +333,7 @@ class Game:
         score_y = 10
         
         # Show Buildings or Food count in consistent position
-        if self.current_level.level_data.get('full_sky', False):
+        if self.current_level.level_data.get('full_sky', False) and not self.current_level.level_data.get('is_space', False):
             # Show snake counter for sky level
             score_text = f"Snakes: {self.current_level.defeated_snakes}/3"
             score_surface = font.render(score_text, True, (255, 255, 255))
@@ -364,7 +364,7 @@ class Game:
             score_rect = score_surface.get_rect(topleft=(10, score_y))
             self.window.blit(score_surface, score_rect)
         else:
-            # Regular level - show Food counter
+            # Regular level (including space) - show Food counter
             if self.current_level.food_count >= self.current_level.required_food:
                 food_count = self.current_level.required_food
             else:

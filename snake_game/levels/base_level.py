@@ -133,7 +133,7 @@ class BaseLevel:
         # Add enemy snakes for sky levels
         self.enemy_snakes = []
         self.defeated_snakes = 0
-        if level_data.get('full_sky', False):
+        if level_data.get('full_sky', False) and not level_data.get('is_space', False):
             # Don't spawn enemy snakes here - they'll be created by the cutscene
             pass
     
@@ -876,7 +876,7 @@ class BaseLevel:
                     collision = snake_rect.colliderect(hitbox)
                 elif isinstance(hitbox, (list, tuple)) and len(hitbox) == 4:
                     try:
-                        rect = pygame.Rect(*hitbox)
+                        h_rect = pygame.Rect(*hitbox)
                     except Exception:
                         rect = None
                     if rect and snake_rect.colliderect(rect):
@@ -1002,7 +1002,7 @@ class BaseLevel:
             return False  # Haven't collected the eagle yet
         
         # For sky levels (full_sky), check if defeated_snakes >= 3 AND ending cutscene has played
-        if self.level_data.get('full_sky', False):
+        if self.level_data.get('full_sky', False) and not self.level_data.get('is_space', False):
             # Only return true if the ending cutscene has been triggered and completed
             if self.defeated_snakes >= 3:
                 if not self.ending_cutscene_played:
@@ -1017,7 +1017,7 @@ class BaseLevel:
                     return True   # Complete level after cutscene has finished
             return False  # Not enough snakes defeated
         
-        # For all other levels, use food_count >= required_food
+        # For all other levels (including space), use food_count >= required_food
         return self.food_count >= self.required_food
     
     def draw(self, surface):
@@ -1477,7 +1477,7 @@ class BaseLevel:
         )
 
         # For sky level, create (or recreate) enemy snakes in their cutscene positions
-        if self.level_data.get('full_sky', False):
+        if self.level_data.get('full_sky', False) and not self.level_data.get('is_space', False):
             # Remove any old enemy snakes
             self.enemy_snakes = []
             # Now always spawn the three themed enemies
@@ -1550,14 +1550,14 @@ class BaseLevel:
             except Exception:
                 return False
             return rect.colliderect(h_rect)
-        return False 
+        return False
 
     def draw_ui(self, surface):
         # Use the initialized font
         font = self.game.font
         score_y = 10
         
-        if self.level_data.get('full_sky', False):
+        if self.level_data.get('full_sky', False) and not self.level_data.get('is_space', False):
             # Show snake counter for sky level
             score_text = f"Snakes: {self.defeated_snakes}/3"
             score_surface = font.render(score_text, True, (255, 255, 255))
@@ -1569,6 +1569,7 @@ class BaseLevel:
             score_rect = score_surface.get_rect(topleft=(10, score_y))
             surface.blit(score_surface, score_rect)
         else:
+            # Regular level (including space) - show Food counter
             score_text = f"Food: {self.food_count}/{self.required_food}"
             score_surface = font.render(score_text, True, (255, 255, 255))
             score_rect = score_surface.get_rect(topleft=(10, score_y))
