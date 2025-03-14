@@ -1,64 +1,42 @@
 sprites:
   snake_god:
     type: snake_god
-    position: [center_x, 150]
-  enemy_fire:
-    type: enemy_snake
-    position: [center_x - 200, 200]
-    theme: fire
-    game: true
-  enemy_water:
-    type: enemy_snake
-    position: [center_x + 200, 200]
-    theme: water
-    game: true
-  enemy_earth:
-    type: enemy_snake
-    position: [center_x, 100]
-    theme: earth
-    game: true
+    position: ["center_x - 200", 150]  # Position left side
 
-snake:
-  position: [center_x, center_y]
-  state:
-    sleeping: false
-    length: 1
+initial_state:
+  snake:
+    position: ["center_x", "height - 200"]
+    is_sleeping: false
+    emote: null
 
 sequence: 
   - type: dialogue
     text: "..."
     focus: snake
-  
+
   - type: action
-    duration: 60
+    duration: 15
     actions:
-      - [snake_look_at, snake_god]
-    focus: snake_god
+      - ["snake_angry", false]
   
   - type: dialogue
-    text: "You have defeated my champions, my child."
-    focus: snake_god
-  
-  - type: dialogue
-    text: "Your... child?"
+    text: "That smell . . . it's you."
     focus: snake
   
   - type: dialogue
-    text: "Yes. They were all your progeny, grown to match your power through their own quests."
-    focus: snake_god
+    text: "My... children?"
+    focus: snake
   
   - type: dialogue
-    text: "While you believed yourself guilty, I was forging your children into my next great weapons."
-    focus: snake_god
+    text: "They were my children."
+    focus: snake
+  
+  - type: dialogue
+    text: "How long have I raged? What lies have I been told?"
+    focus: snake
   
   - type: dialogue
     text: "You... you let me believe..."
-    focus: snake
-  
-  - type: action
-    duration: 60
-    actions:
-      - [snake_angry, true]
     focus: snake
   
   - type: dialogue
@@ -70,22 +48,22 @@ sequence:
     focus: snake
   
   - type: dialogue
-    text: "Your fury makes you stronger. It always has."
-    focus: snake_god
-  
-  - type: dialogue
-    text: "No more games. No more manipulation."
+    text: "You raised them in secret, made them champions to rival me? To what end?"
     focus: snake
   
   - type: dialogue
-    text: "I will find you. And I will end this."
+    text: "No more."
     focus: snake
+  
+  - type: dialogue
+    text: "I will find you, god or no. I will scour the universe until I feast upon you."
+    focus: snake
+
+  - type: action
+    duration: 60
+    actions:
+      - ["snake_angry", true]
   
   - type: action
     actions:
       - [snake_ascend, true]
-  
-  - type: action
-    duration: 120
-    actions:
-      - [fade_out, true]
