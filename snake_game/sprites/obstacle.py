@@ -1547,7 +1547,82 @@ class MountainRidge(Obstacle):
                 for _ in range(num_patches):
                     patch_x = x + random.randint(-15, 15)
                     patch_y = y + random.randint(0, int(snow_line - y))
-                    self.snow_patches.append((patch_x, patch_y)) 
+                    self.snow_patches.append((patch_x, patch_y))
+
+class Cloud(Obstacle):
+    def __init__(self, x, y, variations, block_size=20):
+        super().__init__(x, y, variations, block_size)
+        self.width = variations.get('width', 4) * block_size
+        self.height = variations.get('height', 3) * block_size
+        self.pixel_size = 4
+        self.pixels = self._generate_pixels()
+        self.can_be_destroyed = False  # Clouds can't be destroyed
+        
+    def _generate_pixels(self):
+        # Create a more blocky cloud shape using a pixel map
+        pixels = []
+        width = self.width // self.pixel_size
+        height = self.height // self.pixel_size
+        
+        # Define cloud shape using 1s and 0s (1 = cloud, 0 = empty)
+        shape = [
+            [0,0,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1],
+            [0,1,1,1,1,1,1,0],
+            [0,0,1,1,1,1,0,0],
+        ]
+        
+        # Scale up the shape to match our dimensions
+        scale_x = width // len(shape[0])
+        scale_y = height // len(shape)
+        
+        for y, row in enumerate(shape):
+            for x, cell in enumerate(row):
+                if cell == 1:
+                    # Scale up each pixel
+                    for sy in range(scale_y):
+                        for sx in range(scale_x):
+                            pixels.append((
+                                x * scale_x + sx,
+                                y * scale_y + sy
+                            ))
+        
+        return pixels
+    
+    def draw_normal(self, surface):
+        cloud_color = (255, 255, 255)  # White clouds
+        
+        # Draw each pixel of the cloud
+        for px, py in self.pixels:
+            pygame.draw.rect(
+                surface,
+                cloud_color,
+                (
+                    self.x + px * self.pixel_size,
+                    self.y + py * self.pixel_size,
+                    self.pixel_size,
+                    self.pixel_size
+                )
+            )
+    
+    def get_hitbox(self):
+        # Return a rectangular hitbox for the cloud
+        return pygame.Rect(self.x, self.y, self.width, self.height)
+    
+    def get_no_spawn_rects(self):
+        # Return both the base hitbox and a buffer zone around the cloud
+        hitbox = self.get_hitbox()
+        buffer = 20  # Buffer zone size
+        spawn_rect = pygame.Rect(
+            hitbox.x - buffer,
+            hitbox.y - buffer,
+            hitbox.width + buffer * 2,
+            hitbox.height + buffer * 2
+        )
+        return [spawn_rect]
+
+__all__ = ['Obstacle', 'Cactus', 'Tree', 'Bush', 'Pond', 'Building', 'Park', 'Lake', 'Rubble', 'MountainPeak', 'MountainRidge', 'River', 'Cloud'] 
 
 class River(Obstacle):
     def __init__(self, x, y, variations, block_size=20):

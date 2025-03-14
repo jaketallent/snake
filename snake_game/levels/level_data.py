@@ -81,6 +81,34 @@ CITY_CRITTERS = [
 ]
 
 # Add new mountain critters list after CITY_CRITTERS
+# Sky critters for the sky level
+SKY_CRITTERS = [
+    {  # Plane
+        'color': (200, 200, 200),  # Silver
+        'secondary_color': (100, 100, 100),  # Dark trim
+        'size': 20,
+        'type': 'plane'
+    },
+    {  # Helicopter
+        'color': (50, 50, 50),  # Dark body
+        'secondary_color': (255, 140, 0),  # Orange rotors
+        'size': 20,
+        'type': 'helicopter'
+    },
+    {  # Bird Flock
+        'color': (30, 30, 30),  # Dark silhouettes
+        'size': 20,
+        'type': 'bird_flock'
+    },
+    {  # Cloud Food - now a stormcloud
+        'color': (60, 60, 80),  # Darker grey for storm cloud
+        'secondary_color': (120, 120, 140),  # Lighter grey for highlights
+        'accent_color': (255, 255, 0),  # Yellow for lightning
+        'size': 20,
+        'type': 'cloud_food'
+    }
+]
+
 MOUNTAIN_CRITTERS = [
     {  # Boulder
         'color': (169, 169, 169),  # Grey
@@ -99,14 +127,10 @@ MOUNTAIN_CRITTERS = [
         'secondary_color': (105, 105, 105),  # Dark grey
         'size': 20,
         'type': 'rocks'
-    },
-    {  # Dead Tree
-        'color': (101, 67, 33),  # Brown
-        'secondary_color': (81, 47, 13),  # Darker brown
-        'size': 20,
-        'type': 'dead_tree'
     }
 ]
+
+
 
 # Add eagle data as a separate constant that can be referenced when needed
 EAGLE_CRITTER = {
@@ -170,6 +194,32 @@ TIMES_OF_DAY = {
             'is_night': True
         }
     },
+    'sky': {
+        'day': {
+            'sky_colors': [
+                (135, 206, 250),  # Light sky blue
+                (176, 226, 255)   # Pale sky blue
+            ],
+            'cloud_color': (255, 255, 255),  # Pure white clouds
+            'is_night': False
+        },
+        'sunset': {
+            'sky_colors': [
+                (255, 180, 140),  # Warm sunset orange
+                (255, 220, 180)   # Light sunset orange
+            ],
+            'cloud_color': (255, 230, 210),  # Sunset-tinted clouds
+            'is_night': False
+        },
+        'night': {
+            'sky_colors': [
+                (15, 15, 45),     # Deep night sky
+                (35, 35, 75)      # Lighter night sky
+            ],
+            'cloud_color': (70, 70, 90),  # Dark night clouds
+            'is_night': True
+        }
+    },
     'city': {
         'day': {
             'sky_colors': [
@@ -219,6 +269,32 @@ TIMES_OF_DAY = {
                 (45, 45, 150)     # Slightly lighter blue
             ],
             'cloud_color': (130, 130, 170),
+            'is_night': True
+        }
+    },
+    'sky': {
+        'day': {
+            'sky_colors': [
+                (135, 206, 250),  # Light sky blue
+                (176, 226, 255)   # Pale sky blue
+            ],
+            'cloud_color': (255, 255, 255),
+            'is_night': False
+        },
+        'sunset': {
+            'sky_colors': [
+                (255, 180, 140),  # Warm sunset
+                (255, 220, 180)   # Light sunset
+            ],
+            'cloud_color': (255, 230, 210),
+            'is_night': False
+        },
+        'night': {
+            'sky_colors': [
+                (15, 15, 45),     # Deep night sky
+                (35, 35, 75)      # Lighter night sky
+            ],
+            'cloud_color': (70, 70, 90),
             'is_night': True
         }
     }
@@ -423,6 +499,20 @@ LEVELS = [
         'cutscenes': {
             'intro': 'mountains_intro',
             'ending': 'mountains_ending'
+        }
+    },
+    {
+        'name': 'Sky',
+        'biome': 'sky',
+        'background_colors': {},  # Sky colors handled by sky_manager
+        'obstacles': [],  # No obstacles in sky level
+        'critters': SKY_CRITTERS,  # Using our defined sky critters
+        'required_food': 8,  # Increased food requirement
+        'play_area': {'top': 50, 'bottom': 550},  # Expanded play area
+        'full_sky': True,  # Indicates this is a full sky level
+        'cutscenes': {
+            'intro': 'sky_intro',
+            'ending': 'sky_ending'
         }
     }
 ] 

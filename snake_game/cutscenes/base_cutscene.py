@@ -38,7 +38,10 @@ class BaseCutscene:
         # Create sprites based on YAML config
         for name, config in self.data['sprites'].items():
             x, y = self.resolve_position(config['position'])
-            sprite = CutsceneSprites.create(config['type'], x, y)
+            # Pass game instance if requested in config
+            if config.get('game', False):
+                config['game'] = self.game
+            sprite = CutsceneSprites.create(config['type'], x, y, **config)
             self.add_sprite(name, sprite)
             self.sprite_focus_states[name] = 0  # Initialize focus state
         
@@ -132,9 +135,11 @@ class BaseCutscene:
             focus_factor = self.sprite_focus_states.get(name, 0)
             darkening = self.overlay_alpha * (1 - focus_factor)
             
-            # Apply adjusted alpha
+            # Apply adjusted alpha and focus state
             if hasattr(sprite, 'alpha'):
                 sprite.alpha = int(original_alpha * (1 - darkening / 255))
+            if hasattr(sprite, 'focus_state'):
+                sprite.focus_state = focus_factor
             
             # Draw the sprite
             sprite.draw(surface)

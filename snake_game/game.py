@@ -72,6 +72,19 @@ class Game:
         self.snake.is_sleeping = False
         self.snake.emote = None
         self.snake.look_at(None)
+        self.snake.frozen = False
+        self.snake.animation_time = 0
+        self.snake.wobble_offset = 0
+        self.snake.idle_timer = 0
+        self.snake.enable_idle_animation = False  # Start with it off
+        self.snake.update_position = True  # Re-enable position updates
+        
+        # Reset ascension state
+        if hasattr(self.snake, 'is_ascending'):
+            self.snake.is_ascending = False
+            self.snake.ascension_timer = 0
+            self.snake.ascension_shake_intensity = 0
+            self.snake.dy = 0
         
         level_data = LEVELS[level_idx]
         self.current_level = BaseLevel(self, level_data, self.current_time_of_day if keep_time else None)
@@ -82,6 +95,11 @@ class Game:
             # Only start music if we're not retrying and there's no intro cutscene
             if not self.current_level.show_intro:
                 self.current_level.start_gameplay()
+            # Re-enable idle animation once the gameplay actually starts:
+            self.snake.enable_idle_animation = True
+        else:
+            # ADDED: Force the level to start gameplay again for sky level enemies to spawn
+            self.current_level.start_gameplay()
     
     def next_level(self):
         if self.current_level_idx + 1 < len(LEVELS):
@@ -312,12 +330,16 @@ class Game:
             
         # Use the initialized font
         font = self.font
-        
-        # Always position score in top left
         score_y = 10
         
         # Show Buildings or Food count in consistent position
-        if self.current_level.level_data.get('is_boss', False):
+        if self.current_level.level_data.get('full_sky', False):
+            # Show snake counter for sky level
+            score_text = f"Snakes: {self.current_level.defeated_snakes}/3"
+            score_surface = font.render(score_text, True, (255, 255, 255))
+            score_rect = score_surface.get_rect(topleft=(10, score_y))
+            self.window.blit(score_surface, score_rect)
+        elif self.current_level.level_data.get('is_boss', False):
             pass  # Boss health will be drawn above boss
         elif self.current_level.level_data['biome'] == 'city':
             # Show full amount if we've hit or exceeded the requirement

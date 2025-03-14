@@ -252,8 +252,18 @@ class TankBoss:
         
         # If this damage will reduce health to 0, start death animation
         if current_health - damage <= 0:
+            # NEW: force the boss's displayed health to 0 to avoid mismatch
+            self.game.current_level.boss_health = 0
+
             self.start_death_animation()
-            
+            return damage
+        
+        # Otherwise, apply partial damage
+        self.game.current_level.boss_health = max(
+            0,
+            self.game.current_level.boss_health - damage // 5
+        )
+        
         return damage
 
     def draw(self, surface):
