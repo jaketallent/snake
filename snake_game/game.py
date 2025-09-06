@@ -2,7 +2,8 @@ import pygame
 import random
 import math
 from levels.base_level import BaseLevel
-from levels.level_data import LEVELS
+from levels.config import LEVELS
+from importlib import import_module
 from sprites.snake import Snake
 from menu import MainMenu, LevelSelectMenu
 from audio.music_manager import MusicManager
@@ -43,6 +44,7 @@ class Game:
         self.level_select_menu = LevelSelectMenu(self)
         self.current_menu = self.main_menu
         self.in_menu = True
+        self.dev_show_overlay = False
         
         # Initialize persistent background elements
         self.stars = [
@@ -87,7 +89,17 @@ class Game:
             self.snake.dy = 0
         
         level_data = LEVELS[level_idx]
-        self.current_level = BaseLevel(self, level_data, self.current_time_of_day if keep_time else None)
+        # Support optional per-level class override
+        level_cls = BaseLevel
+        level_class_path = level_data.get('level_class')
+        if level_class_path:
+            try:
+                module_path, class_name = level_class_path.rsplit('.', 1)
+                module = import_module(module_path)
+                level_cls = getattr(module, class_name, BaseLevel)
+            except Exception:
+                level_cls = BaseLevel
+        self.current_level = level_cls(self, level_data, self.current_time_of_day if keep_time else None)
         self.current_level_idx = level_idx
         
         if not keep_time:
@@ -193,6 +205,8 @@ class Game:
                                 not self.current_level.boss.is_dying):
                                 self.current_level.boss_health = 0
                                 self.current_level.boss.start_death_animation()
+                        elif event.key == pygame.K_v:  # Toggle dev overlay
+                            self.dev_show_overlay = not self.dev_show_overlay
                     
                     # Handle other input based on game state
                     if self.current_level.current_cutscene:

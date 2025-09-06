@@ -2,14 +2,15 @@ import pygame
 import random
 import math
 from sprites.food import Food
-from sprites.obstacle import (Cactus, Tree, Bush, Pond, Building, 
-                            Park, Lake, Rubble, MountainPeak, MountainRidge, River, Cloud)
+from sprites.obstacle import (
+    Cactus, Tree, Bush, Pond, Building,
+    Park, Lake, MountainPeak, MountainRidge, River, Cloud,
+)
 from sprites.snake import Snake
-from .sky_manager import SkyManager
-from .level_data import TIMES_OF_DAY, EAGLE_CRITTER
+from levels.sky_manager import SkyManager
+from levels.constants import TIMES_OF_DAY, EAGLE_CRITTER
 from cutscenes.base_cutscene import BaseCutscene
 from sprites.boss import TankBoss
-from sprites.enemy_snake import EnemySnake
 
 class BaseLevel:
     def __init__(self, game, level_data, time_of_day=None):
@@ -43,13 +44,15 @@ class BaseLevel:
             }
         else:
             # Normal time of day handling for other biomes
+            # Allow per-level override of times of day via config
+            times_map = self.level_data.get('times_of_day', TIMES_OF_DAY.get(biome, {}))
             if time_of_day is None:
-                time_options = list(TIMES_OF_DAY[biome].keys())
-                self.current_time = random.choice(time_options)
+                time_options = list(times_map.keys())
+                self.current_time = random.choice(time_options) if time_options else 'day'
             else:
                 self.current_time = time_of_day
             
-            sky_theme = TIMES_OF_DAY[biome][self.current_time]
+            sky_theme = times_map.get(self.current_time, next(iter(times_map.values()), {'sky_colors': [(0,0,0),(0,0,0)], 'is_night': False}))
         
         self.sky_manager = SkyManager(
             game.width, 
@@ -92,19 +95,9 @@ class BaseLevel:
         self.target_mountain = None
         self.eagle_spawned = False
         
-        # Initialize obstacles and target mountain if needed
-        if level_data.get('has_target_mountain', False):
-            self.initialize_obstacles()
-            # After obstacles are created, randomly select a mountain peak as target
-            # Only choose mountains that are visible on-screen (inside the play area)
-            mountain_peaks = [
-                obs for obs in self.obstacles 
-                if isinstance(obs, MountainPeak) and self._is_mountain_visible(obs)
-            ]
-            if mountain_peaks:
-                self.target_mountain = random.choice(mountain_peaks)
-        else:
-            self.initialize_obstacles()
+        # Initialize obstacles, then allow subclasses to adjust (e.g., pick targets)
+        self.initialize_obstacles()
+        self.after_obstacles_initialized()
         
         self.find_safe_spawn_for_snake(game.snake)
         
@@ -147,143 +140,21 @@ class BaseLevel:
         elif 'obstacles' in self.level_data:
             # Handle new multi-obstacle configuration
             for obstacle_config in self.level_data['obstacles']:
-                # For city biome, ignore the count parameter
-                if self.level_data['biome'] == 'city':
-                    count = None  # Will be ignored in _create_obstacles
-                else:
-                    count = obstacle_config['count']
-                
                 self._create_obstacles(
                     obstacle_config['type'],
-                    count,
+                    obstacle_config.get('count'),
                     obstacle_config.get('min_size', 2),
                     obstacle_config.get('max_size', 5)
                 )
     
     def _create_obstacles(self, obstacle_type, count, min_size=2, max_size=5):
-        if self.level_data['biome'] == 'city':
-            block_size = 160
-            road_width = 60
-            
-            # Only calculate and split positions once
-            if self.building_positions is None:
-                grid_positions = []
-                
-                vertical_road_top = self.play_area['top'] + road_width // 2
-                first_block_y = vertical_road_top + road_width // 2
-                
-                available_height = self.play_area['bottom'] - first_block_y
-                rows = (available_height + block_size - 1) // block_size
-                cols = self.game.width // block_size
-                
-                for row in range(rows):
-                    for col in range(cols):
-                        block_x = col * block_size + road_width // 2
-                        block_y = first_block_y + (row * block_size)
-                        block_width = block_size - road_width
-                        
-                        # For bottom row, extend height all the way to play area bottom
-                        if row == rows - 1:
-                            block_height = self.play_area['bottom'] - block_y
-                        else:
-                            block_height = block_size - road_width
-                        
-                        # Ensure block height is never less than standard height
-                        block_height = max(block_height, block_size - road_width)
-                        
-                        grid_positions.append((block_x, block_y, block_width, block_height))
-                
-                # Shuffle and split positions once
-                random.shuffle(grid_positions)
-                total = len(grid_positions)
-                building_count = total * 2 // 3  # 2/3 for buildings/rubble
-                park_count = (total - building_count) // 2  # Half of remaining for parks
-                
-                # Keep same ratios but store building positions as rubble positions in boss level
-                if self.level_data.get('is_boss', False):
-                    self.building_positions = grid_positions[:building_count]  # These will be used for rubble
-                else:
-                    self.building_positions = grid_positions[:building_count]
-                
-                self.park_positions = grid_positions[building_count:building_count + park_count]
-                self.lake_positions = grid_positions[building_count + park_count:]
-            
-            if obstacle_type == 'rubble' and self.level_data.get('is_boss', False):
-                # Use building positions for rubble in boss level
-                for x, y, width, height in self.building_positions:
-                    variations = {
-                        'variant': random.choice([1, 2, 3]),
-                        'width': width // 16,
-                        'height': height // 12,
-                        'base_height': height
-                    }
-                    new_obstacle = Rubble(x, y, variations, self.block_size)
-                    self.obstacles.append(new_obstacle)
-            
-            elif obstacle_type == 'building' and not self.level_data.get('is_boss', False):
-                # Get building styles from level data
-                building_styles = self.level_data['background_colors'].get('building_styles', {
-                    'concrete': {
-                        'base': (100, 100, 100),
-                        'top': (80, 80, 80),
-                        'windows': (200, 200, 100),
-                        'entrance': (60, 60, 60),
-                        'trim': (90, 90, 90)
-                    }
-                })
-                
-                # Calculate building heights
-                block_height = block_size - road_width
-                max_overlap = block_height * 2 // 3
-                
-                min_height = 4
-                max_height = 7
-                
-                for x, y, width, height in self.building_positions:
-                    # Randomly choose a building style
-                    style_name = random.choice(list(building_styles.keys()))
-                    style_colors = building_styles[style_name]
-                    
-                    variations = {
-                        'width': width // 16,
-                        'height': random.randint(min_height, max_height),
-                        'base_height': height,  # Use the full calculated height for collision
-                        'colors': style_colors,
-                        'has_entrance': True,
-                        'style': style_name
-                    }
-                    new_obstacle = Building(x, y, variations)
-                    new_obstacle.game = self.game
-                    self.obstacles.append(new_obstacle)
+        attempts = 0
+        initial_count = len(self.obstacles)
+        
+        max_tries = 300
+        tries = 0
 
-                # >>> NEW: set required_buildings to however many buildings we placed
-                self.required_buildings += len(self.building_positions)
-                # <<< end NEW
-            
-            elif obstacle_type == 'park':
-                for x, y, width, height in self.park_positions:
-                    variations = {
-                        'width': width,
-                        'height': height
-                    }
-                    new_obstacle = Park(x, y, variations)
-                    self.obstacles.append(new_obstacle)
-            elif obstacle_type == 'lake':
-                for x, y, width, height in self.lake_positions:
-                    variations = {
-                        'width': width,
-                        'height': height
-                    }
-                    new_obstacle = Lake(x, y, variations)
-                    self.obstacles.append(new_obstacle)
-        else:
-            attempts = 0
-            initial_count = len(self.obstacles)
-            
-            max_tries = 300
-            tries = 0
-
-            while len(self.obstacles) < initial_count + count:
+        while len(self.obstacles) < initial_count + count:
                 # If we've tried too many times, bail out to avoid infinite loop
                 if tries >= max_tries:
                     print(f"Warning: Could not place all '{obstacle_type}' obstacles after {max_tries} tries.")
@@ -323,14 +194,7 @@ class BaseLevel:
                         'height': random.randint(min_size-1, max_size-1)
                     }
                     new_obstacle = Pond(x, y, variations)
-                elif obstacle_type == 'rubble':
-                    variations = {
-                        'variant': random.choice([1, 2, 3]),
-                        'width': random.randint(min_size, max_size),
-                        'height': random.randint(min_size-1, max_size-1),
-                        'base_height': block_size - road_width
-                    }
-                    new_obstacle = Rubble(x, y, variations, self.block_size)
+                
                 elif obstacle_type == 'mountain_peak':
                     size = random.randint(min_size, max_size)
                     variations = {'size': size}
@@ -613,21 +477,7 @@ class BaseLevel:
                 
         return collided
 
-    def _overlaps_building_top(self, x, y):
-        """
-        Checks if the 1-tile food at (x,y) overlaps any building's top rectangle.
-        Also adds a buffer zone around building tops in the city.
-        """
-        food_rect = pygame.Rect(x, y, self.block_size, self.block_size)
-        for obs in self.obstacles:
-            if isinstance(obs, Building):
-                top_rect = obs.get_top_bounding_rect()
-                # Add the same buffer zone as we do for collision rects
-                inflated_rect = top_rect.inflate(20, 20)
-                inflated_rect.center = top_rect.center
-                if food_rect.colliderect(inflated_rect):
-                    return True
-        return False
+    # Removed: _overlaps_building_top — city-specific and unused in base
 
     def is_safe_position(self, x, y):
         """Check if a position is safe for food spawning"""
@@ -807,27 +657,8 @@ class BaseLevel:
         # If the snake has new input this frame, we'll be more forgiving
         has_new_input = snake.has_input_this_frame
         
-        # NEW: Snap first, then clamp
-        if self.level_data['biome'] == 'city':
-            # Calculate how far into the next tile we are
-            tile_progress_x = (new_x % snake.block_size) / snake.block_size
-            tile_progress_y = (new_y % snake.block_size) / snake.block_size
-            
-            # If we're less than 25% into the next tile, treat us as still in the previous tile
-            # for movement purposes
-            if tile_progress_x < 0.25:
-                new_x = math.floor(new_x / snake.block_size) * snake.block_size
-            elif tile_progress_x > 0.75:
-                new_x = math.ceil(new_x / snake.block_size) * snake.block_size
-            else:
-                new_x = round(new_x / snake.block_size) * snake.block_size
-                
-            if tile_progress_y < 0.25:
-                new_y = math.floor(new_y / snake.block_size) * snake.block_size
-            elif tile_progress_y > 0.75:
-                new_y = math.ceil(new_y / snake.block_size) * snake.block_size
-            else:
-                new_y = round(new_y / snake.block_size) * snake.block_size
+        # Allow subclasses to adjust player movement (e.g., city snapping)
+        new_x, new_y = self.adjust_player_movement(new_x, new_y, snake)
 
         hit_wall = False
         # Clamp X within bounds
@@ -982,9 +813,7 @@ class BaseLevel:
                 return True
             return False
 
-        # For city (non-boss) levels, use buildings_destroyed rather than food_count
-        if self.level_data['biome'] == 'city' and not self.level_data.get('is_boss', False):
-            return self.buildings_destroyed >= self.required_buildings
+        # City completion handled by CityLevel subclass
         
         # For mountain levels that require eagle or other special conditions
         if self.level_data.get('has_target_mountain', False):
@@ -1024,49 +853,12 @@ class BaseLevel:
         # Draw background
         self.draw_background(surface)
         
-        if self.level_data['biome'] in ['city', 'mountain']:
-            # 1) Draw all non-building/non-mountain obstacles
-            for obstacle in self.obstacles:
-                if not isinstance(obstacle, (Building, MountainPeak)):
-                    obstacle.draw(surface)
+        # Delegate to subclass-customizable scene drawing
+        self.draw_scene(surface)
 
-            # 2) Sort mountains/buildings by y-position for proper z-ordering
-            buildings_and_mountains = [o for o in self.obstacles if isinstance(o, (Building, MountainPeak))]
-            buildings_and_mountains.sort(key=lambda x: x.y)
-
-            # 3) Draw all bases first
-            for obs in buildings_and_mountains:
-                if isinstance(obs, (MountainPeak, Building)):
-                    if obs.is_being_destroyed:
-                        # NEW: Call obs.draw to show the destruction effect
-                        obs.draw(surface)  
-                    else:
-                        obs.draw_base(surface)
-                else:
-                    obs.draw_base(surface)
-            
-            # 4) Draw food
-            for food_item in self.food:
-                food_item.draw(surface)
-                
-            # 5) Draw snake
-            self.game.snake.draw(surface)
-            
-            # 6) Draw all tops last (so they appear over the snake)
-            for obs in buildings_and_mountains:
-                # Skip top if obstacle is being destroyed (because we're drawing the explosion instead)
-                if not obs.is_being_destroyed:
-                    if isinstance(obs, (MountainPeak, Building)):
-                        obs.draw_top(surface)
-                    else:
-                        obs.draw_top(surface)
-        else:
-            # Original logic for other biomes
-            for obstacle in self.obstacles:
-                obstacle.draw(surface)
-            for food_item in self.food:
-                food_item.draw(surface)
-            self.game.snake.draw(surface)
+        # Draw developer overlay if enabled
+        if getattr(self.game, 'dev_show_overlay', False):
+            self.draw_debug_overlay(surface)
 
         # Draw cutscenes last
         if self.current_cutscene:
@@ -1112,11 +904,7 @@ class BaseLevel:
             return
         
         # Special handling for different biomes
-        if self.level_data['biome'] == 'mountain':
-            self._draw_mountain_background(surface)
-        elif self.level_data['biome'] == 'city':
-            self._draw_city_background(surface)
-        elif self.level_data['biome'] == 'sky':
+        if self.level_data['biome'] == 'sky':
             # Sky level doesn't need additional background drawing
             pass
         else:
@@ -1138,77 +926,7 @@ class BaseLevel:
                         pygame.draw.rect(surface, ground_colors[color_index],
                                        [x, y + offset, block_size, block_size])
 
-    def _draw_mountain_background(self, surface):
-        """Draw mountain terrain similar to forest but with rolling hills"""
-        ground_colors = self.level_data['background_colors']['ground']
-        ground_height = self.play_area['bottom'] - self.play_area['top']
-        
-        # Fill base color
-        pygame.draw.rect(surface, ground_colors[-1],
-                        [0, self.play_area['top'], 
-                         self.game.width, ground_height])
-        
-        # Draw rolling hills pattern (similar to forest's grass but smoother)
-        block_size = 8
-        for y in range(self.play_area['top'], self.play_area['bottom'], block_size):
-            for x in range(0, self.game.width, block_size):
-                # Use smoother sine wave for hills
-                offset = int(20 * math.sin(x * 0.01))  # Gentler slope than forest
-                if y + offset > self.play_area['top']:
-                    color_index = int((y + offset - self.play_area['top']) / 60) % len(ground_colors)
-                    pygame.draw.rect(surface, ground_colors[color_index],
-                                   [x, y + offset, block_size, block_size])
-
-    def _draw_city_background(self, surface):
-        road_colors = self.level_data['background_colors']['ground']
-        road_line_color = self.level_data['background_colors']['road_lines']
-        block_size = 160
-        road_width = 60
-
-        # Fill background with base road color
-        pygame.draw.rect(surface, road_colors[0],
-                         [0, self.play_area['top'],
-                          self.game.width, self.play_area['bottom'] - self.play_area['top']])
-
-        # Draw vertical roads first (shift them so none extends above the sky)
-        vertical_road_top = self.play_area['top'] + road_width // 2
-        for x in range(0, self.game.width + block_size, block_size):
-            pygame.draw.rect(surface, road_colors[1],
-                             [x - road_width // 2, vertical_road_top,
-                              road_width, self.play_area['bottom'] - vertical_road_top])
-            
-            # Dashed white lines - stop before each intersection
-            center_x = x - 2
-            for y in range(vertical_road_top, self.play_area['bottom'], block_size):
-                # Draw dashes only between intersections
-                dash_start = y + road_width // 2 + 10  # Start after intersection
-                dash_end = y + block_size - road_width // 2 - 10  # Stop before next intersection
-                
-                current_y = dash_start
-                while current_y < dash_end:
-                    pygame.draw.rect(surface, road_line_color, [center_x, current_y, 4, 20])
-                    current_y += 30
-
-        # Draw horizontal roads (clamp the top side to avoid overlapping sky)
-        for y in range(vertical_road_top, self.play_area['bottom'] + block_size, block_size):
-            actual_y = y - road_width // 2
-            if actual_y < self.play_area['top']:
-                actual_y = self.play_area['top']
-            
-            pygame.draw.rect(surface, road_colors[1],
-                             [0, actual_y, self.game.width, road_width])
-
-            # Dashed white lines - stop before each intersection
-            center_y = actual_y + road_width//2 - 2
-            for x in range(0, self.game.width, block_size):
-                # Draw dashes only between intersections
-                dash_start = x + road_width // 2 + 10  # Start after intersection
-                dash_end = x + block_size - road_width // 2 - 10  # Stop before next intersection
-                
-                current_x = dash_start
-                while current_x < dash_end:
-                    pygame.draw.rect(surface, road_line_color, [current_x, center_y, 20, 4])
-                    current_x += 30
+    # City and mountain background helpers moved to subclasses
     
     def update(self):
         # Update cutscene if active
@@ -1258,44 +976,8 @@ class BaseLevel:
                 # Update destruction/discharge timer
                 destruction_complete = obstacle.update_destruction()
                 if destruction_complete:
-                    # Handle special cases before removing
-                    if isinstance(obstacle, Building) and self.level_data['biome'] == 'city':
-                        self.buildings_destroyed += 1
-                        # Create rubble with same dimensions as building
-                        new_rubble = Rubble(
-                            obstacle.x,
-                            obstacle.y,
-                            {
-                                'variant': random.choice([1, 2, 3]),
-                                'width': obstacle.variations['width'],
-                                'height': obstacle.variations['height'],
-                                'base_height': obstacle.base_height
-                            },
-                            obstacle.block_size
-                        )
-                        self.obstacles.append(new_rubble)
-                    elif isinstance(obstacle, MountainPeak):
-                        # If this is the target mountain, spawn the eagle
-                        if obstacle == self.target_mountain and not self.eagle_spawned:
-                            self.eagle_spawned = True
-                            # Calculate the proposed position from the mountain's center
-                            proposed_x = obstacle.x + obstacle.width // 2
-                            proposed_y = obstacle.y + obstacle.height // 2
-                            self.food.append(Food(proposed_x, proposed_y, EAGLE_CRITTER, self.block_size))
-                            # Adjust eagle food position to ensure it is fully visible on-screen horizontally
-                            block = self.block_size // 4  # Used in Food.get_hitbox for eagle
-                            eagle_width = block * 8        # Eagle hitbox width in pixels
-                            # Snap x position to the grid
-                            new_x = round(self.food[-1].x / self.block_size) * self.block_size
-                            # If the eagle would go off the right side of the screen, clamp new_x
-                            if new_x + eagle_width > self.game.width:
-                                new_x = (self.game.width - eagle_width) // self.block_size * self.block_size
-                            self.food[-1].x = new_x
-                        
-                        # Dry up connected rivers
-                        for river in self.obstacles:
-                            if isinstance(river, River) and river.source_mountain == obstacle:
-                                river.start_drying()
+                    # Allow subclasses to handle special effects before removal
+                    self.on_obstacle_destroyed(obstacle)
                     
                     # Remove the destroyed obstacle
                     self.obstacles.remove(obstacle)
@@ -1476,26 +1158,31 @@ class BaseLevel:
             self.night_music
         )
 
-        # For sky level, create (or recreate) enemy snakes in their cutscene positions
-        if self.level_data.get('full_sky', False) and not self.level_data.get('is_space', False):
-            # Remove any old enemy snakes
-            self.enemy_snakes = []
-            # Now always spawn the three themed enemies
-            themes_and_positions = [
-                ('fire', (self.game.width//2 - 200, 200)),
-                ('water', (self.game.width//2 + 200, 200)),
-                ('earth', (self.game.width//2, 100))
-            ]
-            for theme, (x, y) in themes_and_positions:
-                enemy_snake = EnemySnake(x, y, self.game)
-                enemy_snake.set_theme(theme)
-                self.enemy_snakes.append(enemy_snake)
-        
-        # If it's the sky level, keep it off forever
-        if self.level_data.get('full_sky', False):
-            self.game.snake.enable_idle_animation = False
-        else:
-            self.game.snake.enable_idle_animation = True
+        # Default: enable idle animation; subclasses can change this
+        self.game.snake.enable_idle_animation = True
+        # Subclass hook for custom start behavior (e.g., sky enemies)
+        self.on_start_gameplay()
+
+    # -------------------- Extension hooks for subclasses --------------------
+    def adjust_play_area(self):
+        """Allow subclasses to tweak play area after initial calculation."""
+        pass
+
+    def after_obstacles_initialized(self):
+        """Called after obstacles are initialized. Subclasses may override."""
+        pass
+
+    def on_obstacle_destroyed(self, obstacle):
+        """Called when an obstacle finishes destruction. Subclasses may override."""
+        pass
+
+    def on_start_gameplay(self):
+        """Called at the end of start_gameplay for level-specific setup."""
+        pass
+
+    def adjust_player_movement(self, new_x, new_y, snake):
+        """Give subclasses a chance to adjust player movement (e.g., snapping)."""
+        return new_x, new_y
 
     def trigger_cutscene(self, trigger_id):
         if trigger_id in self.cutscenes:
@@ -1677,3 +1364,67 @@ class BaseLevel:
             if snake_rect.colliderect(food_item.get_hitbox()):
                 return True
         return False 
+    def draw_scene(self, surface):
+        """Default scene draw: obstacles -> food -> player snake."""
+        for obstacle in self.obstacles:
+            obstacle.draw(surface)
+        for food_item in self.food:
+            food_item.draw(surface)
+        self.game.snake.draw(surface)
+
+    def draw_debug_overlay(self, surface):
+        """Draw hitboxes and special regions to help debug levels."""
+        # Play area outline
+        pygame.draw.rect(
+            surface,
+            (0, 255, 0),
+            pygame.Rect(0, self.play_area['top'], self.game.width, self.play_area['bottom'] - self.play_area['top']),
+            1,
+        )
+
+        def _draw_rect(r, color, w=1):
+            if isinstance(r, pygame.Rect):
+                pygame.draw.rect(surface, color, r, w)
+            elif isinstance(r, (list, tuple)) and len(r) == 4:
+                pygame.draw.rect(surface, color, pygame.Rect(*r), w)
+
+        # Obstacle hitboxes
+        for obs in self.obstacles:
+            hb = obs.get_hitbox() if hasattr(obs, 'get_hitbox') else None
+            if hb is None:
+                continue
+            if isinstance(hb, list):
+                for r in hb:
+                    _draw_rect(r, (255, 0, 0), 1)
+            else:
+                _draw_rect(hb, (255, 0, 0), 1)
+            # No-spawn rects
+            if hasattr(obs, 'get_no_spawn_rects'):
+                for r in obs.get_no_spawn_rects():
+                    _draw_rect(r, (255, 255, 0), 1)
+
+        # Food hitboxes
+        for food in self.food:
+            hb = food.get_hitbox() if hasattr(food, 'get_hitbox') else None
+            if hb is None:
+                continue
+            if isinstance(hb, list):
+                for r in hb:
+                    _draw_rect(r, (0, 255, 0), 1)
+            else:
+                _draw_rect(hb, (0, 255, 0), 1)
+
+        # City grid debug
+        if self.level_data.get('biome') == 'city':
+            for positions, color in [
+                (getattr(self, 'building_positions', []) or [], (0, 128, 255)),
+                (getattr(self, 'park_positions', []) or [], (0, 200, 0)),
+                (getattr(self, 'lake_positions', []) or [], (0, 200, 200)),
+            ]:
+                for x, y, w, h in positions:
+                    pygame.draw.rect(surface, color, pygame.Rect(x, y, w, h), 1)
+
+        # Mountain target highlight
+        if self.level_data.get('biome') == 'mountain' and self.target_mountain is not None:
+            hb = self.target_mountain.get_hitbox()
+            _draw_rect(hb, (255, 0, 255), 2)
