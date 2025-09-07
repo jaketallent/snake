@@ -31,6 +31,9 @@ class Snake:
         self.can_spit = True
         self.spit_cooldown = 0
         self.spit_cooldown_time = 15
+        # Power-up grace window after first use (frames)
+        self.power_up_grace_timer = 0
+        self.power_up_grace_duration = 12  # ~200ms at 60fps
         self.has_input_this_frame = False
         self.recent_inputs = []  # Track recent input timestamps
         self.input_buffer_frames = 8  # Increased from 5 to 8 frames
@@ -578,6 +581,13 @@ class Snake:
             self.power_up_timer += 1
             if self.power_up_timer >= 60:  # Reset animation timer every 60 frames
                 self.power_up_timer = 0
+        # Handle post-use grace window: allow multiple quick hits
+        if self.power_up_grace_timer > 0:
+            self.power_up_grace_timer -= 1
+            if self.power_up_grace_timer <= 0:
+                # Grace expired; actually consume the power-up
+                self.is_powered_up = False
+                self.power_up_timer = 0
 
     def handle_food_eaten(self):
         """Call this when food is eaten"""
@@ -587,9 +597,15 @@ class Snake:
             self.food_streak = 0
 
     def destroy_obstacle(self):
-        """Call this when destroying an obstacle with power-up"""
-        self.is_powered_up = False
-        self.power_up_timer = 0 
+        """Called when using power-up on an obstacle. Starts a short grace window."""
+        # Only start grace if we currently have the power-up and no grace active
+        if self.is_powered_up and self.power_up_grace_timer <= 0:
+            self.power_up_grace_timer = self.power_up_grace_duration
+
+    def start_powerup_grace(self):
+        """Public helper to start the grace period even if not tied to obstacles (e.g., vs snakes)."""
+        if self.is_powered_up and self.power_up_grace_timer <= 0:
+            self.power_up_grace_timer = self.power_up_grace_duration
 
     def look_at(self, point):
         """Make the snake look at a specific point"""
@@ -612,11 +628,12 @@ class Snake:
 
     def spit_venom(self):
         """Spit a venom projectile at the cost of one segment"""
-        # Allow spitting in boss levels OR sky level
-        if not hasattr(self, 'game') or (
-            not self.game.current_level.level_data.get('is_boss', False) and
-            not self.game.current_level.level_data.get('full_sky', False)
-        ):
+        # Allow spitting in boss levels OR sky level (but not in space)
+        is_boss = self.game.current_level.level_data.get('is_boss', False) if hasattr(self, 'game') else False
+        is_full_sky = self.game.current_level.level_data.get('full_sky', False) if hasattr(self, 'game') else False
+        is_space = self.game.current_level.level_data.get('is_space', False) if hasattr(self, 'game') else False
+        allow_spit = is_boss or (is_full_sky and not is_space)
+        if not allow_spit:
             return
         
         if len(self.body) > 1 and self.can_spit:

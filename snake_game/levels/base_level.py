@@ -102,12 +102,12 @@ class BaseLevel:
         self.find_safe_spawn_for_snake(game.snake)
         
         # Initialize food based on level type
-        if level_data.get('full_sky', False):
-            # Spawn 4 food items for sky level
+        if level_data.get('full_sky', False) and not level_data.get('is_space', False):
+            # Spawn 4 food items for sky level (not space)
             for _ in range(4):
                 self.spawn_food()
         else:
-            # Single food for other levels
+            # Single food for other levels, including space
             self.spawn_food()
         
         self.ending_cutscene_played = False
@@ -964,7 +964,8 @@ class BaseLevel:
                     if snake_rect.colliderect(boss_rect):
                         damage = self.boss.take_damage()
                         self.boss_health = max(0, self.boss_health - damage)
-                        self.game.snake.destroy_obstacle()  # Consume power-up
+                        # Start grace window rather than immediate consumption
+                        self.game.snake.destroy_obstacle()
                 
                 # Check if boss health reaches 0
                 if self.boss_health <= 0 and not hasattr(self.boss, 'is_dying'):
@@ -1295,20 +1296,18 @@ class BaseLevel:
                 if player_rect.colliderect(enemy_rect):
                     SNAKE_DAMAGE = 5  # Damage dealt by powered-up snake
                     
-                    # If both powered up, both take damage and lose power-up
+                    # If both powered up, both take damage. Player keeps a brief grace window.
                     if player.is_powered_up and enemy.is_powered_up:
                         player.take_snake_damage(SNAKE_DAMAGE)
                         enemy.take_snake_damage(SNAKE_DAMAGE)
-                        player.is_powered_up = False
-                        player.power_up_timer = 0  # Reset timer
+                        player.start_powerup_grace()
                         enemy.is_powered_up = False
                     # If only player powered up, enemy takes damage and dies
                     elif player.is_powered_up:
                         enemy.take_snake_damage(SNAKE_DAMAGE)
                         enemy.is_dead = True  # Make sure enemy is marked as dead
-                        # Explicitly consume the power-up
-                        player.is_powered_up = False
-                        player.power_up_timer = 0  # Reset timer
+                        # Start grace window for chaining hits
+                        player.start_powerup_grace()
                     # If only enemy powered up, player takes damage
                     elif enemy.is_powered_up:
                         player.take_snake_damage(SNAKE_DAMAGE)

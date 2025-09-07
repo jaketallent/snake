@@ -56,6 +56,14 @@ class Food:
             self._draw_bird_flock(surface, block)
         elif self.critter_data['type'] == 'cloud_food':
             self._draw_cloud_food(surface)
+        elif self.critter_data['type'] == 'ufo':
+            self._draw_ufo(surface, block)
+        elif self.critter_data['type'] == 'rocket':
+            self._draw_rocket(surface, block)
+        elif self.critter_data['type'] == 'satellite':
+            self._draw_satellite(surface, block)
+        elif self.critter_data['type'] == 'alien':
+            self._draw_alien(surface, block)
     
     def _draw_boulder(self, surface, block):
         """Draw a simple boulder (grey square with lighter highlight)"""
@@ -412,3 +420,58 @@ class Food:
         
         # Draw lightning with thickness
         pygame.draw.lines(surface, lightning_color, False, lightning_points, 2)
+
+    def _draw_ufo(self, surface, block):
+        # Saucer base
+        base_color = self.critter_data.get('color', (200, 200, 210))
+        dome_color = self.critter_data.get('secondary_color', (140, 160, 200))
+        light_color = self.critter_data.get('accent_color', (0, 255, 190))
+        # Base (wide)
+        pygame.draw.rect(surface, base_color, [self.x, self.y + block * 2, block * 4, block])
+        # Dome
+        pygame.draw.rect(surface, dome_color, [self.x + block, self.y + block, block * 2, block])
+        # Lights
+        for i in range(4):
+            pygame.draw.rect(surface, light_color, [self.x + i * block, self.y + block * 3, block // 2, block // 2])
+
+    def _draw_rocket(self, surface, block):
+        body = self.critter_data.get('color', (245, 245, 245))
+        trim = self.critter_data.get('secondary_color', (230, 0, 60))
+        flame = self.critter_data.get('accent_color', (255, 200, 80))
+        # Body
+        pygame.draw.rect(surface, body, [self.x + block, self.y + block, block * 2, block * 2])
+        # Nose cone
+        pygame.draw.rect(surface, trim, [self.x + block, self.y, block * 2, block])
+        # Fins
+        pygame.draw.rect(surface, trim, [self.x, self.y + block * 2, block, block])
+        pygame.draw.rect(surface, trim, [self.x + block * 3, self.y + block * 2, block, block])
+        # Exhaust flame
+        pygame.draw.rect(surface, flame, [self.x + block * 1, self.y + block * 3, block * 2, block])
+
+    def _draw_satellite(self, surface, block):
+        body = self.critter_data.get('color', (210, 210, 220))
+        panel = self.critter_data.get('secondary_color', (50, 140, 255))
+        accent = self.critter_data.get('accent_color', (255, 255, 255))
+        # Central body
+        pygame.draw.rect(surface, body, [self.x + block, self.y + block, block * 2, block * 2])
+        # Solar panels
+        pygame.draw.rect(surface, panel, [self.x - block, self.y + block, block * 2, block])
+        pygame.draw.rect(surface, panel, [self.x + block * 3, self.y + block, block * 2, block])
+        # Antenna/accent
+        pygame.draw.rect(surface, accent, [self.x + block * 2, self.y, block // 2, block])
+
+    def _draw_alien(self, surface, block):
+        body = self.critter_data.get('color', (60, 255, 120))
+        eye = self.critter_data.get('secondary_color', (255, 105, 180))
+        shine = self.critter_data.get('accent_color', (255, 255, 255))
+        # Body (blob)
+        pygame.draw.rect(surface, body, [self.x + block, self.y + block, block * 2, block * 2])
+        pygame.draw.rect(surface, body, [self.x + block // 2, self.y + block * 2, block * 3, block])
+        # Eyes
+        pygame.draw.rect(surface, eye, [self.x + block, self.y + block, block, block])
+        pygame.draw.rect(surface, eye, [self.x + block * 2, self.y + block, block, block])
+        # Shine dots
+        pygame.draw.rect(surface, shine, [self.x + block * 2 + block // 2, self.y + block + block // 2, block // 2, block // 2])
+        # Tentacle nubs
+        pygame.draw.rect(surface, body, [self.x, self.y + block * 3, block // 2, block // 2])
+        pygame.draw.rect(surface, body, [self.x + block * 3 + block // 2, self.y + block * 3, block // 2, block // 2])

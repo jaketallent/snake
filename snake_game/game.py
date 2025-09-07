@@ -355,6 +355,15 @@ class Game:
             self.window.blit(score_surface, score_rect)
         elif self.current_level.level_data.get('is_boss', False):
             pass  # Boss health will be drawn above boss
+        elif self.current_level.level_data.get('is_space', False):
+            # Space: show Planets destroyed counter
+            destroyed = getattr(self.current_level, 'planets_destroyed', 0)
+            required = getattr(self.current_level, 'required_planets', 0)
+            count = min(destroyed, required) if required else destroyed
+            score_text = f"Planets: {count}/{required or '?'}"
+            score_surface = font.render(score_text, True, (255, 255, 255))
+            score_rect = score_surface.get_rect(topleft=(10, score_y))
+            self.window.blit(score_surface, score_rect)
         elif self.current_level.level_data['biome'] == 'city':
             # Show full amount if we've hit or exceeded the requirement
             if self.current_level.buildings_destroyed >= self.current_level.required_buildings:
