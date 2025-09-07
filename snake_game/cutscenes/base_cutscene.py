@@ -15,6 +15,12 @@ class BaseCutscene:
         self.waiting_for_input = False
         self.is_complete = False
         self.current_dialogue_shown = False
+        self.overlay_alpha = 0  # Scene darkening
+        self.target_alpha = 128  # Max darkness
+        self.current_focus = None
+        self.fade_duration = 120  # 2 seconds at 60fps
+        self.transition_speed = 128 / 120  # Speed to reach target_alpha in fade_duration frames
+        self.sprite_focus_states = {}  # Start with empty focus states
         
         self.load_cutscene(cutscene_id)
         self.setup_sprites()
@@ -32,11 +38,16 @@ class BaseCutscene:
         # Create sprites based on YAML config
         for name, config in self.data['sprites'].items():
             x, y = self.resolve_position(config['position'])
-            sprite = CutsceneSprites.create(config['type'], x, y)
+            # Pass game instance if requested in config
+            if config.get('game', False):
+                config['game'] = self.game
+            sprite = CutsceneSprites.create(config['type'], x, y, **config)
             self.add_sprite(name, sprite)
-            
-        # Set up snake if specified
+            self.sprite_focus_states[name] = 0  # Initialize focus state
+        
+        # Initialize snake focus state only if snake is in the cutscene
         if 'snake' in self.data:
+            self.sprite_focus_states['snake'] = 0
             snake = self.game.snake
             pos = self.data['snake']['position']
             snake.x, snake.y = self.resolve_position(pos)
@@ -61,7 +72,32 @@ class BaseCutscene:
     def update(self):
         if self.is_complete:
             return
+        
+        # Update all sprites that have an update method
+        for sprite in self.sprites.values():
+            if hasattr(sprite, 'update'):
+                sprite.update()
+        
+        # Update snake if it's ascending
+        if self.game.snake.is_ascending:
+            self.game.snake.update()
+        
+        # Smoothly adjust scene darkening when any god is present
+        if any(hasattr(sprite, 'alpha') and sprite.alpha > 0 for sprite in self.sprites.values()):
+            self.overlay_alpha = min(self.target_alpha, self.overlay_alpha + self.transition_speed)
+        else:
+            self.overlay_alpha = max(0, self.overlay_alpha - self.transition_speed)
+        
+        # Update focus transitions for each sprite and snake
+        for name in list(self.sprites.keys()) + ['snake']:
+            target = 1.0 if name == self.current_focus else 0.0
+            current = self.sprite_focus_states.get(name, 0)
             
+            if current < target:
+                self.sprite_focus_states[name] = min(target, current + 0.05)
+            elif current > target:
+                self.sprite_focus_states[name] = max(target, current - 0.05)
+        
         if self.sequence_index >= len(self.sequence):
             self.end_sequence()
             return
@@ -78,11 +114,63 @@ class BaseCutscene:
         self.sequence_time += 1
     
     def draw(self, surface):
-        # Draw all sprites
-        for sprite in self.sprites.values():
-            sprite.draw(surface)
+        # Draw darkening overlay first
+        if self.overlay_alpha > 0:
+            overlay = pygame.Surface(surface.get_rect().size, pygame.SRCALPHA)
+            overlay.fill((0, 0, 0, self.overlay_alpha))
+            surface.blit(overlay, (0, 0))
         
-        # Draw dialogue if active
+        # Add "ESC = Skip" text - position based on whether it's a boss level
+        skip_text = self.game.font.render("Esc = Skip", True, (128, 128, 128))  # Gray color
+        is_boss_level = self.game.current_level.level_data.get('is_boss', False)
+        skip_rect = skip_text.get_rect(topleft=(10, 10 if is_boss_level else 35))  # Adjust Y position if boss level
+        surface.blit(skip_text, skip_rect)
+        
+        # Draw all sprites with appropriate alpha
+        for name, sprite in self.sprites.items():
+            # Store original alpha
+            original_alpha = sprite.alpha if hasattr(sprite, 'alpha') else 255
+            
+            # Calculate focus-adjusted alpha
+            focus_factor = self.sprite_focus_states.get(name, 0)
+            darkening = self.overlay_alpha * (1 - focus_factor)
+            
+            # Apply adjusted alpha and focus state
+            if hasattr(sprite, 'alpha'):
+                sprite.alpha = int(original_alpha * (1 - darkening / 255))
+            if hasattr(sprite, 'focus_state'):
+                sprite.focus_state = focus_factor
+            
+            # Draw the sprite
+            sprite.draw(surface)
+            
+            # Restore original alpha
+            if hasattr(sprite, 'alpha'):
+                sprite.alpha = original_alpha
+        
+        # Handle snake drawing with focus only if snake is in cutscene
+        if 'snake' in self.sprite_focus_states:
+            # Store snake's original alpha
+            original_snake_alpha = self.game.snake.alpha if hasattr(self.game.snake, 'alpha') else 255
+            
+            # Calculate focus-adjusted alpha exactly like sprites
+            if self.overlay_alpha > 0:
+                focus_factor = self.sprite_focus_states.get('snake', 0)
+                darkening = self.overlay_alpha * (1 - focus_factor)
+                snake_alpha = int(original_snake_alpha * (1 - darkening / 255))
+            else:
+                snake_alpha = original_snake_alpha
+            
+            # Apply alpha and draw
+            if hasattr(self.game.snake, 'alpha'):
+                self.game.snake.alpha = snake_alpha
+            self.game.snake.draw(surface)
+            
+            # Restore original alpha
+            if hasattr(self.game.snake, 'alpha'):
+                self.game.snake.alpha = original_snake_alpha
+        
+        # Draw dialogue last
         if self.dialogue_text:
             self._draw_dialogue(surface)
     
@@ -153,15 +241,30 @@ class BaseCutscene:
             if not self.dialogue_text and not self.current_dialogue_shown:
                 self.show_dialogue(sequence['text'])
                 self.current_dialogue_shown = True
+                # Update focus if specified, otherwise maintain current focus
+                if 'focus' in sequence:
+                    self.current_focus = sequence['focus']
                 if 'actions' in sequence:
                     self.perform_actions(sequence['actions'])
             return not self.waiting_for_input
             
         elif sequence['type'] == 'action':
-            progress = min(1.0, self.sequence_time / sequence['duration'])
-            if 'actions' in sequence:
-                self.perform_actions(sequence['actions'], progress)
-            return progress >= 1.0
+            if 'duration' in sequence:
+                # Normal timed actions
+                progress = min(1.0, self.sequence_time / sequence['duration'])
+                if 'actions' in sequence:
+                    self.perform_actions(sequence['actions'], progress)
+                if 'focus' in sequence:
+                    self.current_focus = sequence['focus']
+                return progress >= 1.0
+            else:
+                # Special actions that run until complete
+                if 'actions' in sequence:
+                    self.perform_actions(sequence['actions'])
+                    # Check if special action is complete
+                    if any(action[0] == 'snake_ascend' for action in sequence['actions']):
+                        return self.game.snake.y < -100  # End sooner
+                return False
     
     def perform_actions(self, actions, progress=None):
         for action in actions:
@@ -172,6 +275,8 @@ class BaseCutscene:
                 self.game.snake.look_at((target.x + 15, target.y - 5))
             elif action[0] == 'snake_sleep':
                 self.game.snake.is_sleeping = action[1]
+            elif action[0] == 'snake_angry':
+                self.game.snake.is_angry = action[1]
             elif action[0] == 'fade_heart':
                 if progress and progress >= action[1]:
                     self.game.snake.emote = None
@@ -206,7 +311,21 @@ class BaseCutscene:
                         nest.has_eggs = False
             elif action[0] == 'snake_god_appear':
                 if action[1]:
-                    self.sprites['snake_god'].fade_in(3)
+                    # Fade in
+                    self.sprites['snake_god'].fade_in(255 / self.fade_duration)
+                else:
+                    # Fade out
+                    self.sprites['snake_god'].fade_out(255 / self.fade_duration)
+            elif action[0] == 'bird_god_appear':
+                if action[1]:
+                    # Fade in
+                    self.sprites['bird_god'].fade_in(255 / self.fade_duration)
+                else:
+                    # Fade out
+                    self.sprites['bird_god'].fade_out(255 / self.fade_duration)
+            elif action[0] == 'snake_ascend':
+                if not self.game.snake.is_ascending:  # Only start if not already ascending
+                    self.game.snake.start_ascension()
     
     def resolve_position(self, position):
         """Convert position with variables into actual coordinates"""
@@ -222,6 +341,11 @@ class BaseCutscene:
             y = y.replace('center_y', str(self.game.height // 2))
             y = y.replace('height', str(self.game.height))
             y = eval(y)
+        
+        # Snap the resolved positions to the nearest grid using the snake's block_size
+        block_size = self.game.snake.block_size
+        x = round(x / block_size) * block_size
+        y = round(y / block_size) * block_size
         
         return x, y 
 

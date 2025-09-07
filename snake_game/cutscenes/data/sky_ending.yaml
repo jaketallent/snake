@@ -1,0 +1,69 @@
+sprites:
+  snake_god:
+    type: snake_god
+    position: ["center_x - 200", 150]  # Position left side
+
+initial_state:
+  snake:
+    position: ["center_x", "height - 200"]
+    is_sleeping: false
+    emote: null
+
+sequence: 
+  - type: dialogue
+    text: "..."
+    focus: snake
+
+  - type: action
+    duration: 15
+    actions:
+      - ["snake_angry", false]
+  
+  - type: dialogue
+    text: "That smell . . . it's you."
+    focus: snake
+  
+  - type: dialogue
+    text: "My... children?"
+    focus: snake
+  
+  - type: dialogue
+    text: "They were my children."
+    focus: snake
+  
+  - type: dialogue
+    text: "How long have I raged? What lies have I been told?"
+    focus: snake
+  
+  - type: dialogue
+    text: "You... you let me believe..."
+    focus: snake
+  
+  - type: dialogue
+    text: "All this time... my guilt... my pain..."
+    focus: snake
+  
+  - type: dialogue
+    text: "And they were my children?!"
+    focus: snake
+  
+  - type: dialogue
+    text: "You raised them in secret, made them champions to rival me? To what end?"
+    focus: snake
+  
+  - type: dialogue
+    text: "No more."
+    focus: snake
+  
+  - type: dialogue
+    text: "I will find you, god or no. I will scour the universe until I feast upon you."
+    focus: snake
+
+  - type: action
+    duration: 60
+    actions:
+      - ["snake_angry", true]
+  
+  - type: action
+    actions:
+      - [snake_ascend, true]

@@ -69,28 +69,21 @@ class SnakeGod:
         self.y = y
         self.block_size = block_size
         self.alpha = 0
-        self.overlay_alpha = 0
+        self.fade_speed = 0  # Add this to track fade direction/speed
     
     def draw(self, surface):
         if self.alpha <= 0:
             return
             
-        # Create overlay for darkening effect
-        overlay = pygame.Surface((surface.get_width(), surface.get_height()))
-        overlay.fill((0, 0, 0))
-        overlay.set_alpha(self.overlay_alpha)
-        surface.blit(overlay, (0, 0))
-        
         # Create a surface for the snake god with transparency
         size = self.block_size
         width = size * 8
-        height = size * 6  # Made taller
-        god_surface = pygame.Surface((width, height + size), pygame.SRCALPHA)  # Extra height for fangs
+        height = size * 6
+        god_surface = pygame.Surface((width, height + size), pygame.SRCALPHA)
         
         # Draw the giant snake head
-        for i in range(6):  # Increased height
+        for i in range(6):
             for j in range(8):
-                # Create shading pattern
                 color = (0, 200, 0) if (i == 5 or j == 7) else (0, 255, 0)
                 pygame.draw.rect(god_surface, (*color, self.alpha),
                                [j * size, i * size, size, size])
@@ -102,27 +95,199 @@ class SnakeGod:
         pygame.draw.rect(god_surface, eye_color,
                         [5 * size, 2 * size, size, size])
         
-        # Draw fangs extending below the head
+        # Draw fangs
         fang_color = (255, 255, 255, self.alpha)
         fang_width = size // 2
-        fang_height = size * 1.5  # Longer fangs
-        # Left fang
+        fang_height = size * 1.5
         pygame.draw.rect(god_surface, fang_color,
                         [2 * size, 6 * size, fang_width, fang_height])
-        # Right fang
         pygame.draw.rect(god_surface, fang_color,
                         [5 * size + size//2, 6 * size, fang_width, fang_height])
         
-        # Center the snake god in the sky
+        # Center the sprite at the specified position
         god_rect = god_surface.get_rect(center=(self.x, self.y))
         surface.blit(god_surface, god_rect)
     
     def fade_in(self, amount=5):
-        self.alpha = min(255, self.alpha + amount)
-        self.overlay_alpha = min(128, self.overlay_alpha + amount // 2)
+        self.fade_speed = abs(amount)  # Store positive fade speed
+        self.alpha = min(255, self.alpha + self.fade_speed)
     
     def fade_out(self, amount=5):
-        self.alpha = max(0, self.alpha - amount) 
+        self.fade_speed = -abs(amount)  # Store negative fade speed
+        self.alpha = max(0, self.alpha + self.fade_speed)
+
+    def update(self):
+        """Update fade transitions"""
+        if self.fade_speed > 0:
+            self.alpha = min(255, self.alpha + self.fade_speed)
+        elif self.fade_speed < 0:
+            self.alpha = max(0, self.alpha + self.fade_speed)
+
+    def get_sprite_rect(self):
+        """Return the rectangle that encompasses the sprite"""
+        size = self.block_size
+        width = size * 8
+        height = size * 6
+        return pygame.Rect(
+            self.x - width // 2,  # Center horizontally
+            self.y - height // 2,  # Center vertically
+            width,
+            height + size  # Add extra height for fangs
+        )
+
+class BirdGod:
+    def __init__(self, x, y, block_size=30):
+        self.x = x
+        self.y = y
+        self.block_size = block_size
+        self.alpha = 0
+        self.wing_angle = 0
+        self.wing_speed = 0.05
+        self.fade_speed = 0  # Add this to track fade direction/speed
+    
+    def draw(self, surface):
+        if self.alpha <= 0:
+            return
+            
+        # Create a surface for the bird god with transparency
+        size = self.block_size
+        width = size * 12  # Wider for wings
+        height = size * 6
+        god_surface = pygame.Surface((width, height), pygame.SRCALPHA)
+        
+        # Colors for the bird god
+        body_color = (139, 69, 19, self.alpha)  # Saddle brown
+        wing_color = (101, 67, 33, self.alpha)  # Darker brown
+        eye_color = (255, 255, 255, self.alpha)  # White eyes
+        talon_color = (64, 64, 64, self.alpha)  # Dark gray talons
+        beak_color = (255, 215, 0, self.alpha)  # Golden yellow
+        
+        # Define body rect first since wings need its position
+        body_rect = pygame.Rect(width//3, height//3, size * 4, size * 2)
+        
+        # Draw animated wings first (so they appear behind body)
+        wing_spread = math.sin(self.wing_angle) * 0.2 + 0.8  # Wing movement
+        
+        # Main wings (brown)
+        wing_points_left = [
+            (body_rect.left, body_rect.centery),
+            (body_rect.left - size * 4 * wing_spread, body_rect.top - size),
+            (body_rect.left - size * 2, body_rect.centery + size//2)
+        ]
+        wing_points_right = [
+            (body_rect.right, body_rect.centery),
+            (body_rect.right + size * 4 * wing_spread, body_rect.top - size),
+            (body_rect.right + size * 2, body_rect.centery + size//2)
+        ]
+        
+        # Wing undersides (white)
+        wing_underside_color = (255, 255, 255, self.alpha)  # White
+        wing_points_left_under = [
+            (body_rect.left + size//2, body_rect.centery),
+            (body_rect.left - size * 3.5 * wing_spread, body_rect.top - size//2),
+            (body_rect.left - size * 1.5, body_rect.centery + size//3)
+        ]
+        wing_points_right_under = [
+            (body_rect.right - size//2, body_rect.centery),
+            (body_rect.right + size * 3.5 * wing_spread, body_rect.top - size//2),
+            (body_rect.right + size * 1.5, body_rect.centery + size//3)
+        ]
+        
+        # Draw wings in correct order
+        pygame.draw.polygon(god_surface, wing_color, wing_points_left)
+        pygame.draw.polygon(god_surface, wing_underside_color, wing_points_left_under)
+        pygame.draw.polygon(god_surface, wing_color, wing_points_right)
+        pygame.draw.polygon(god_surface, wing_underside_color, wing_points_right_under)
+        
+        # Draw the body (on top of wings)
+        pygame.draw.rect(god_surface, body_color, body_rect)
+        
+        # Draw beak
+        beak_width = size
+        beak_height = size * 1.5
+        
+        # Beak position (centered horizontally on body)
+        beak_x = body_rect.centerx - beak_width//2
+        beak_y = body_rect.bottom - size//2
+        
+        # Draw beak with curved top and pointed bottom
+        curve_height = beak_height // 3
+        beak_points = [
+            (beak_x, beak_y + curve_height),  # Left base
+            (beak_x + beak_width//4, beak_y),  # Left curve point
+            (beak_x + beak_width//2, beak_y - curve_height//2),  # Top middle
+            (beak_x + beak_width * 3//4, beak_y),  # Right curve point
+            (beak_x + beak_width, beak_y + curve_height),  # Right base
+            (beak_x + beak_width//2, beak_y + beak_height)  # Bottom point
+        ]
+        pygame.draw.polygon(god_surface, beak_color, beak_points)
+        
+        # Draw talons (three on each foot)
+        talon_width = size // 4
+        talon_height = size
+        talon_spacing = size // 2
+        
+        # Left foot talons (aligned with left side of body)
+        for i in range(3):
+            talon_points = [
+                (body_rect.left + (i * talon_spacing), body_rect.bottom),  # Top
+                (body_rect.left + (i * talon_spacing) - talon_width//2, body_rect.bottom + talon_height),  # Tip
+                (body_rect.left + (i * talon_spacing) + talon_width//2, body_rect.bottom)  # Right base
+            ]
+            pygame.draw.polygon(god_surface, talon_color, talon_points)
+        
+        # Right foot talons (aligned with right side of body)
+        for i in range(3):
+            base_x = body_rect.right - (i * talon_spacing)
+            talon_points = [
+                (base_x, body_rect.bottom),  # Top
+                (base_x - talon_width//2, body_rect.bottom),  # Left base
+                (base_x + talon_width//2, body_rect.bottom + talon_height)  # Tip
+            ]
+            pygame.draw.polygon(god_surface, talon_color, talon_points)
+        
+        # Draw glowing eyes
+        eye_size = size//2
+        pygame.draw.rect(god_surface, eye_color,
+                        [body_rect.left + size, body_rect.top + size//2,
+                         eye_size, eye_size])
+        pygame.draw.rect(god_surface, eye_color,
+                        [body_rect.right - size - eye_size, body_rect.top + size//2,
+                         eye_size, eye_size])
+        
+        # Update wing animation
+        self.wing_angle += self.wing_speed
+        
+        # Center the bird god in the sky
+        god_rect = god_surface.get_rect(center=(self.x, self.y))
+        surface.blit(god_surface, god_rect)
+    
+    def fade_in(self, amount=5):
+        self.fade_speed = abs(amount)  # Store positive fade speed
+        self.alpha = min(255, self.alpha + self.fade_speed)
+    
+    def fade_out(self, amount=5):
+        self.fade_speed = -abs(amount)  # Store negative fade speed
+        self.alpha = max(0, self.alpha + self.fade_speed)
+
+    def update(self):
+        """Update fade transitions"""
+        if self.fade_speed > 0:
+            self.alpha = min(255, self.alpha + self.fade_speed)
+        elif self.fade_speed < 0:
+            self.alpha = max(0, self.alpha + self.fade_speed)
+
+    def get_sprite_rect(self):
+        """Return the rectangle that encompasses the sprite"""
+        size = self.block_size
+        width = size * 12  # Account for wings
+        height = size * 6
+        return pygame.Rect(
+            self.x - width // 2,  # Center horizontally
+            self.y - height // 2,  # Center vertically
+            width,
+            height
+        )
 
 class Nest:
     def __init__(self, x, y, block_size=20):

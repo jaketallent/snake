@@ -4,7 +4,7 @@ import math
 from sprites.snake import Snake
 
 class MenuItem:
-    def __init__(self, text, action, font, position, selected=False):
+    def __init__(self, text, action, font, position, selected=False, alignment='center'):
         self.text = text
         self.action = action
         self.font = font
@@ -12,12 +12,16 @@ class MenuItem:
         self.selected = selected
         self.color = (255, 255, 255)
         self.selected_color = (255, 255, 0)
+        self.alignment = alignment
         self._update_surface()
     
     def _update_surface(self):
         color = self.selected_color if self.selected else self.color
         self.surface = self.font.render(self.text, True, color)
-        self.rect = self.surface.get_rect(center=self.position)
+        if self.alignment == 'midleft':
+            self.rect = self.surface.get_rect(midleft=self.position)
+        else:
+            self.rect = self.surface.get_rect(center=self.position)
     
     def set_selected(self, selected):
         if self.selected != selected:
@@ -269,13 +273,47 @@ class LevelSelectMenu(Menu):
             center=(game.width // 2, game.height // 4)
         )
         
+        # Define menu box dimensions first
+        menu_width = 350
+        menu_left = self.game.width // 2 - menu_width // 2
+        text_padding = 40  # Increased padding from left edge of menu box
+        
         # Add menu items for each level
         for i, level in enumerate(game.levels):
-            self.add_item(f"Level {i + 1}: {level['name']}", 
-                         lambda x=i: self.select_level(x))
+            y_position = self.game.height // 2 + len(self.items) * 50
+            x_position = menu_left + text_padding  # Align to left edge + padding
+            
+            item = MenuItem(
+                f"{i + 1}. {level['name']}", 
+                lambda x=i: self.select_level(x),
+                self.game.font,
+                (x_position, y_position),
+                len(self.items) == self.selected_index,
+                alignment='midleft'  # Specify left alignment
+            )
+            self.items.append(item)
         
-        # Add back option
-        self.add_item("Back", self.back_to_main)
+        # Add back option (centered)
+        y_position = self.game.height // 2 + len(self.items) * 50
+        item = MenuItem(
+            "Back",
+            self.back_to_main,
+            self.game.font,
+            (self.game.width // 2, y_position),  # Keep "Back" centered
+            len(self.items) == self.selected_index,
+            alignment='center'  # Explicitly set center alignment
+        )
+        self.items.append(item)
+        
+        # Update menu area
+        menu_item_height = 50
+        total_items_height = menu_item_height * len(self.items)
+        self.menu_area = {
+            'top': self.game.height // 2 - menu_item_height,
+            'bottom': self.game.height // 2 + total_items_height,
+            'left': menu_left,
+            'right': menu_left + menu_width
+        }
     
     def select_level(self, level_index):
         return ("start_level", level_index)

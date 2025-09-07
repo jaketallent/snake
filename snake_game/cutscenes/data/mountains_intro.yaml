@@ -1,0 +1,119 @@
+sprites:
+  snake_god:
+    type: snake_god
+    position: ["center_x - 200", 150]  # Position left side
+  
+  bird_god:
+    type: bird_god
+    position: ["center_x + 200", 150]  # Position right side
+
+initial_state:
+  snake:
+    position: ["center_x", "height - 200"]  # Position snake near bottom
+    is_sleeping: false
+    emote: null
+
+sequence:
+  - type: action
+    duration: 60  # 1 second to look up
+    actions:
+      - ["snake_look_at", "bird_god"]
+
+  - type: action
+    duration: 120  # 2 seconds for bird god to appear
+    actions:
+      - ["bird_god_appear", true]
+
+  - type: dialogue
+    text: "So... the serpent has grown strong."
+    focus: "bird_god"
+
+  - type: dialogue
+    text: "I am sorry for the loss of your children."
+
+  - type: dialogue
+    text: "But my eagle was only acting in accord with its nature."
+
+  - type: dialogue
+    text: "Just as a snake must eat small creatures to survive, so must an eagle abscond with eggs and devour the fish of the sea."
+
+  - type: dialogue
+    text: "..."
+
+  - type: dialogue
+    text: "The power you have gathered is unnatural. It will lead to ruin, for both yourself and this world."
+
+  - type: dialogue
+    text: "..."
+    focus: "snake"
+
+  - type: dialogue
+    text: "I shall find your eagle and take my revenge, wherever it may cower."
+    focus: "snake"
+
+  - type: dialogue
+    text: "*sigh*"
+    focus: "bird_god"
+
+  - type: dialogue
+    text: "My champion has also grown strong, but wishes to avoid bloodshed. He has gone into a cave among the mountains."
+
+  - type: action
+    duration: 120
+    actions:
+      - ["snake_god_appear", true]
+      - ["snake_look_at", "snake_god"]
+
+  - type: dialogue
+    text: "Foul, feathered beast! You simply fear reprisal for what your child has done."
+    focus: "snake_god"
+
+  - type: action
+    duration: 30
+    actions:
+      - ["snake_look_at", "bird_god"]
+
+  - type: dialogue
+    text: "Your master deceives you. He cares not for your plight."
+    focus: "bird_god"
+
+  - type: dialogue
+    text: "You are simply an instrument of his power."
+
+  - type: dialogue
+    text: "..."
+
+  - type: dialogue
+    text: "Perhaps, in your blind hunger, you have already swallowed your own eggs in pursuit of revenge."
+
+  - type: dialogue
+    text: "!!!"
+    focus: "snake"
+
+  - type: action
+    duration: 30
+    actions:
+    - ["snake_look_at", "snake_god"]
+
+  - type: dialogue
+    text: "..."
+    focus: "snake_god"
+
+  - type: dialogue
+    text: "ENOUGH!!!"
+    focus: "snake"
+
+  - type: action
+    duration: 120  # Match the fade duration
+    actions:
+      - ["snake_angry", true]
+      - [snake_god_appear, false]
+      - [bird_god_appear, false]
+
+  - type: dialogue
+    text: "I tire of this dickering. I will smash every mountain, dry every river, to find and eat my foe!!!"
+    focus: "snake"
+
+  - type: dialogue
+    text: "Only blood will pay for this."
+    focus: "snake"

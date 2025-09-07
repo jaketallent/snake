@@ -2,11 +2,15 @@ import pygame
 import random
 import math
 from sprites.food import Food
-from sprites.obstacle import Cactus, Tree, Bush, Pond, Building, Park, Lake, Rubble
+from sprites.obstacle import (
+    Cactus, Tree, Bush, Pond, Building,
+    Park, Lake, MountainPeak, MountainRidge, River, Cloud,
+)
 from sprites.snake import Snake
-from .sky_manager import SkyManager
-from .level_data import TIMES_OF_DAY
+from levels.sky_manager import SkyManager
+from levels.constants import TIMES_OF_DAY, EAGLE_CRITTER
 from cutscenes.base_cutscene import BaseCutscene
+from sprites.boss import TankBoss
 
 class BaseLevel:
     def __init__(self, game, level_data, time_of_day=None):
@@ -14,7 +18,7 @@ class BaseLevel:
         self.level_data = level_data.copy()
         self.display_name = level_data['name']
         self.obstacles = []
-        self.food = None
+        self.food = []  # Change from None to empty list
         self.food_count = 0
         self.required_food = level_data.get('required_food', 5)
         self.block_size = 20
@@ -23,49 +27,108 @@ class BaseLevel:
         self.buildings_destroyed = 0
         self.required_buildings = 0
         
+        # Add boss-related attributes
+        self.boss = None
+        self.boss_health = 100 if level_data.get('is_boss', False) else 0
+        
         # Create sky manager first so we can use it to determine play area
         biome = level_data['biome']
-        if time_of_day is None:
-            time_options = list(TIMES_OF_DAY[biome].keys())
-            self.current_time = random.choice(time_options)
-        else:
-            self.current_time = time_of_day
         
-        sky_theme = TIMES_OF_DAY[biome][self.current_time]
+        # For space level, use a special time of day
+        if biome == 'space':
+            self.current_time = 'space'
+            # Add is_space flag to sky_theme
+            sky_theme = {
+                'sky_colors': level_data['background_colors']['sky_colors'],
+                'is_space': True
+            }
+        else:
+            # Normal time of day handling for other biomes
+            # Allow per-level override of times of day via config
+            times_map = self.level_data.get('times_of_day', TIMES_OF_DAY.get(biome, {}))
+            if time_of_day is None:
+                time_options = list(times_map.keys())
+                self.current_time = random.choice(time_options) if time_options else 'day'
+            else:
+                self.current_time = time_of_day
+            
+            sky_theme = times_map.get(self.current_time, next(iter(times_map.values()), {'sky_colors': [(0,0,0),(0,0,0)], 'is_night': False}))
+        
         self.sky_manager = SkyManager(
             game.width, 
             game.height, 
             0,  # sky starts at top
-            sky_theme
+            sky_theme,
+            full_sky=level_data.get('full_sky', False)  # Pass the full_sky flag
         )
         
-        # Calculate play area dynamically based on sky height
-        sky_height = self.sky_manager.get_sky_height()
-        self.play_area = {
-            'top': sky_height,
-            'bottom': level_data['play_area']['bottom']
-        }
-        
-        # If it's the city biome, shift the top boundary down slightly
-        if self.level_data['biome'] == 'city':
-            # For example, let the snake move 30 pixels closer to the sky border
-            self.play_area['top'] -= 30
+        # Calculate play area
+        if self.level_data.get('full_sky', False):
+            # For sky level, use the full screen height
+            self.play_area = {
+                'top': 0,  # Full access to top
+                'bottom': self.game.height  # Full access to bottom
+            }
+        else:
+            # For other levels, use sky height as before
+            sky_height = self.sky_manager.get_sky_height()
+            self.play_area = {
+                'top': sky_height,
+                'bottom': level_data['play_area']['bottom']
+            }
+            
+            # If it's the city biome, shift the top boundary down slightly
+            if self.level_data['biome'] == 'city':
+                # For example, let the snake move 30 pixels closer to the sky border
+                self.play_area['top'] -= 30
         
         is_night = self.current_time in ['night', 'sunset']
         self.night_music = is_night
         
-        self.level_data['name'] = f"{level_data['name']} ({self.current_time.title()})"
+        # Update level name with time of day (except for space)
+        if biome != 'space':
+            self.level_data['name'] = f"{level_data['name']} ({self.current_time.title()})"
         
         self.building_positions = None
         self.park_positions = None
         
-        self.initialize_obstacles()
-        self.find_safe_spawn_for_snake(game.snake)
-        self.spawn_food()
+        self.target_mountain = None
+        self.eagle_spawned = False
         
+        # Initialize obstacles, then allow subclasses to adjust (e.g., pick targets)
+        self.initialize_obstacles()
+        self.after_obstacles_initialized()
+        
+        self.find_safe_spawn_for_snake(game.snake)
+        
+        # Initialize food based on level type
+        if level_data.get('full_sky', False) and not level_data.get('is_space', False):
+            # Spawn 4 food items for sky level (not space)
+            for _ in range(4):
+                self.spawn_food()
+        else:
+            # Single food for other levels, including space
+            self.spawn_food()
+        
+        self.ending_cutscene_played = False
         self.current_cutscene = None
         self.cutscenes = level_data.get('cutscenes', {})
         self.show_intro = 'intro' in self.cutscenes
+        
+        # Initialize boss if this is a boss level
+        if self.level_data.get('is_boss', False):
+            self.boss = TankBoss(
+                self.game.width // 2 - 60,  # Center horizontally
+                self.play_area['top'] + 50,  # Near top of play area
+                self.game
+            )
+        
+        # Add enemy snakes for sky levels
+        self.enemy_snakes = []
+        self.defeated_snakes = 0
+        if level_data.get('full_sky', False) and not level_data.get('is_space', False):
+            # Don't spawn enemy snakes here - they'll be created by the cutscene
+            pass
     
     def initialize_obstacles(self):
         if 'obstacle_type' in self.level_data:
@@ -77,123 +140,26 @@ class BaseLevel:
         elif 'obstacles' in self.level_data:
             # Handle new multi-obstacle configuration
             for obstacle_config in self.level_data['obstacles']:
-                # For city biome, ignore the count parameter
-                if self.level_data['biome'] == 'city':
-                    count = None  # Will be ignored in _create_obstacles
-                else:
-                    count = obstacle_config['count']
-                
                 self._create_obstacles(
                     obstacle_config['type'],
-                    count,
+                    obstacle_config.get('count'),
                     obstacle_config.get('min_size', 2),
                     obstacle_config.get('max_size', 5)
                 )
     
     def _create_obstacles(self, obstacle_type, count, min_size=2, max_size=5):
-        if self.level_data['biome'] == 'city':
-            block_size = 160
-            road_width = 60
-            
-            # Only calculate and split positions once
-            if self.building_positions is None:
-                grid_positions = []
-                
-                vertical_road_top = self.play_area['top'] + road_width // 2
-                first_block_y = vertical_road_top + road_width // 2
-                
-                available_height = self.play_area['bottom'] - first_block_y
-                rows = (available_height + block_size - 1) // block_size
-                cols = self.game.width // block_size
-                
-                for row in range(rows):
-                    for col in range(cols):
-                        block_x = col * block_size + road_width // 2
-                        block_y = first_block_y + (row * block_size)
-                        block_width = block_size - road_width
-                        
-                        # For bottom row, extend height all the way to play area bottom
-                        if row == rows - 1:
-                            block_height = self.play_area['bottom'] - block_y
-                        else:
-                            block_height = block_size - road_width
-                        
-                        # Ensure block height is never less than standard height
-                        block_height = max(block_height, block_size - road_width)
-                        
-                        grid_positions.append((block_x, block_y, block_width, block_height))
-                
-                # Shuffle and split positions once
-                random.shuffle(grid_positions)
-                total = len(grid_positions)
-                building_count = total * 2 // 3  # 2/3 for buildings
-                park_count = (total - building_count) // 2  # Half of remaining for parks
-                
-                self.building_positions = grid_positions[:building_count]
-                self.park_positions = grid_positions[building_count:building_count + park_count]
-                self.lake_positions = grid_positions[building_count + park_count:]
-            
-            if obstacle_type == 'building':
-                # Get building styles from level data
-                building_styles = self.level_data['background_colors'].get('building_styles', {
-                    'concrete': {
-                        'base': (100, 100, 100),
-                        'top': (80, 80, 80),
-                        'windows': (200, 200, 100),
-                        'entrance': (60, 60, 60),
-                        'trim': (90, 90, 90)
-                    }
-                })
-                
-                # Calculate building heights
-                block_height = block_size - road_width
-                max_overlap = block_height * 2 // 3
-                
-                min_height = 4
-                max_height = 7
-                
-                for x, y, width, height in self.building_positions:
-                    # Randomly choose a building style
-                    style_name = random.choice(list(building_styles.keys()))
-                    style_colors = building_styles[style_name]
-                    
-                    variations = {
-                        'width': width // 16,
-                        'height': random.randint(min_height, max_height),
-                        'base_height': height,  # Use the full calculated height for collision
-                        'colors': style_colors,
-                        'has_entrance': True,
-                        'style': style_name
-                    }
-                    new_obstacle = Building(x, y, variations)
-                    new_obstacle.game = self.game
-                    self.obstacles.append(new_obstacle)
+        attempts = 0
+        initial_count = len(self.obstacles)
+        
+        max_tries = 300
+        tries = 0
 
-                # >>> NEW: set required_buildings to however many buildings we placed
-                self.required_buildings += len(self.building_positions)
-                # <<< end NEW
-            
-            elif obstacle_type == 'park':
-                for x, y, width, height in self.park_positions:
-                    variations = {
-                        'width': width // 16,
-                        'height': height // 12
-                    }
-                    new_obstacle = Park(x, y, variations)
-                    self.obstacles.append(new_obstacle)
-            elif obstacle_type == 'lake':
-                for x, y, width, height in self.lake_positions:
-                    variations = {
-                        'width': width // 16,
-                        'height': height // 12
-                    }
-                    new_obstacle = Lake(x, y, variations)
-                    self.obstacles.append(new_obstacle)
-        else:
-            attempts = 0
-            initial_count = len(self.obstacles)  # Keep this for proper counting
-            
-            while len(self.obstacles) < initial_count + count:
+        while len(self.obstacles) < initial_count + count:
+                # If we've tried too many times, bail out to avoid infinite loop
+                if tries >= max_tries:
+                    print(f"Warning: Could not place all '{obstacle_type}' obstacles after {max_tries} tries.")
+                    break
+
                 x = round(random.randrange(0, self.game.width - self.block_size) / self.block_size) * self.block_size
                 y = round(random.randrange(self.play_area['top'], self.play_area['bottom'] - self.block_size) / self.block_size) * self.block_size
                 
@@ -205,7 +171,7 @@ class BaseLevel:
                         'has_second_arm': random.random() > 0.5,
                         'arm_direction': random.choice([-1, 1])
                     }
-                    new_obstacle = Cactus(x, y, variations)
+                    new_obstacle = Cactus(x, y, variations, self.block_size)
                 elif obstacle_type == 'tree':
                     height = random.randint(min_size, max_size)
                     width = random.randint(min_size-1, max_size-1)
@@ -228,86 +194,330 @@ class BaseLevel:
                         'height': random.randint(min_size-1, max_size-1)
                     }
                     new_obstacle = Pond(x, y, variations)
+                
+                elif obstacle_type == 'mountain_peak':
+                    size = random.randint(min_size, max_size)
+                    variations = {'size': size}
+                    new_obstacle = MountainPeak(x, y, variations, self.block_size)
+                elif obstacle_type == 'mountain_ridge':
+                    size = random.randint(min_size, max_size)
+                    variations = {'size': size}
+                    new_obstacle = MountainRidge(x, y, variations, self.block_size)
+                elif obstacle_type == 'cloud':
+                    variations = {
+                        'width': random.randint(min_size, max_size),
+                        'height': random.randint(min_size-1, max_size-1)
+                    }
+                    new_obstacle = Cloud(x, y, variations, self.block_size)
+                elif obstacle_type == 'river':
+                    # Find mountains to start from
+                    mountain_peaks = [obs for obs in self.obstacles 
+                                     if isinstance(obs, MountainPeak)]
+                    
+                    if not mountain_peaks:
+                        tries += 1
+                        continue
+                    
+                    # Pick a random mountain
+                    source_mountain = random.choice(mountain_peaks)
+                    mountain_base = source_mountain.get_hitbox()
+                    
+                    # Determine which side of the mountain to start from
+                    mountain_center_x = mountain_base.centerx
+                    screen_center_x = self.game.width // 2
+                    
+                    if mountain_center_x < screen_center_x:
+                        start_x = mountain_base.centerx + random.randint(0, mountain_base.width // 4)
+                        direction = 1  # Flow right
+                    else:
+                        start_x = mountain_base.centerx - random.randint(0, mountain_base.width // 4)
+                        direction = -1  # Flow left
+                    
+                    start_y = mountain_base.bottom      # Start right at the bottom
+                    
+                    variations = {
+                        'width': random.randint(min_size, max_size) * 4,
+                        'length': random.randint(200, 300),
+                        'direction': direction
+                    }
+                    new_obstacle = River(start_x, start_y, variations, self.block_size)
+                    new_obstacle.source_mountain = source_mountain  # Store reference to the source mountain
+                    new_obstacle.game = self.game  # Ensure game reference is set
+                    
+                    # Check if the river would go off-screen or too close to other rivers
+                    collision = False
+                    for obs in self.obstacles:
+                        if isinstance(obs, River):
+                            for hitbox in obs.get_hitbox():
+                                for new_hitbox in new_obstacle.get_hitbox():
+                                    if hitbox.inflate(30, 30).colliderect(new_hitbox):  # Reduced spacing
+                                        collision = True
+                                        break
+                                if collision:
+                                    break
+                        if collision:
+                            break
+                    
+                    # Also check if river goes off-screen
+                    for hitbox in new_obstacle.get_hitbox():
+                        if (hitbox.left < 0 or hitbox.right > self.game.width or
+                            hitbox.bottom > self.play_area['bottom']):
+                            collision = True
+                            break
+                    
+                    if not collision:
+                        self.obstacles.append(new_obstacle)
+                    
+                    tries += 1
                 else:
+                    tries += 1
                     continue
                 
                 # Check for collisions with existing obstacles
                 collision = False
-                new_hitbox = new_obstacle.get_hitbox()
-                for existing_obstacle in self.obstacles:
-                    padding = self.block_size
-                    padded_hitbox = new_hitbox.inflate(padding, padding)
-                    if padded_hitbox.colliderect(existing_obstacle.get_hitbox()):
-                        collision = True
+                new_hitboxes = new_obstacle.get_hitbox()
+                if isinstance(new_hitboxes, list):
+                    # Handle list of hitboxes
+                    for hitbox in new_hitboxes:
+                        padded_hitbox = hitbox.inflate(self.block_size, self.block_size)
+                        for existing_obstacle in self.obstacles:
+                            existing_hitbox = existing_obstacle.get_hitbox()
+                            if existing_hitbox is None:
+                                continue
+                            if isinstance(existing_hitbox, list):
+                                # Check against all hitboxes of existing obstacle
+                                for existing_box in existing_hitbox:
+                                    if padded_hitbox.colliderect(existing_box):
+                                        collision = True
+                                        break
+                            else:
+                                if padded_hitbox.colliderect(existing_hitbox):
+                                    collision = True
+                                    break
+                        if collision:
+                            break
+                else:
+                    # Handle single hitbox (old behavior)
+                    padded_hitbox = new_hitboxes.inflate(self.block_size, self.block_size)
+                    for existing_obstacle in self.obstacles:
+                        existing_hitbox = existing_obstacle.get_hitbox()
+                        if existing_hitbox is None:
+                            continue
+                        if isinstance(existing_hitbox, list):
+                            for existing_box in existing_hitbox:
+                                if padded_hitbox.colliderect(existing_box):
+                                    collision = True
+                                    break
+                        else:
+                            if padded_hitbox.colliderect(existing_hitbox):
+                                collision = True
+                                break
+                
+                if collision:
+                    tries += 1
+                    continue
+                
+                # Valid placement, so add the obstacle
+                self.obstacles.append(new_obstacle)
+                # Reset tries? Usually, we just keep counting, so it won't freeze again
+
+    def spawn_food(self):
+        """Spawns food item(s) in random, valid location(s)."""
+        max_attempts = 300
+        attempts = 0
+
+        # For sky level, use full vertical space and no obstacle checks
+        is_sky_level = self.level_data.get('full_sky', False)
+        if is_sky_level:
+            while attempts < max_attempts:
+                # Calculate grid-aligned positions using full sky area
+                grid_x = random.randint(0, (self.game.width - self.block_size) // self.block_size)
+                grid_y = random.randint(50 // self.block_size,  # Leave small margin at top
+                                  550 // self.block_size)  # Sky level height
+                
+                # Convert to pixel coordinates
+                x = grid_x * self.block_size
+                y = grid_y * self.block_size
+
+                # Check collision with existing food items
+                collision_found = False
+                food_rect = pygame.Rect(x, y, self.block_size, self.block_size)
+                
+                # Check collision with snake body and existing food
+                for segment in self.game.snake.body:
+                    segment_rect = pygame.Rect(segment[0], segment[1], 
+                                            self.block_size, self.block_size)
+                    if food_rect.colliderect(segment_rect):
+                        collision_found = True
                         break
                 
-                if not collision:
-                    self.obstacles.append(new_obstacle)
+                # Check collision with existing food
+                for existing_food in self.food:
+                    existing_rect = pygame.Rect(existing_food.x, existing_food.y,
+                                             self.block_size, self.block_size)
+                    if food_rect.colliderect(existing_rect):
+                        collision_found = True
+                        break
+                
+                if not collision_found:
+                    # Create food with random sky critter
+                    critter_data = random.choice(self.level_data['critters'])
+                    new_food = Food(x, y, critter_data, self.block_size)
+                    self.food.append(new_food)
+                    return True
                 
                 attempts += 1
-    
-    def spawn_food(self):
-        max_attempts = 100
-        for attempt in range(max_attempts):
-            x = round(random.randrange(0, self.game.width - self.block_size) / self.block_size) * self.block_size
-            y = round(random.randrange(self.play_area['top'], self.play_area['bottom'] - self.block_size) / self.block_size) * self.block_size
+            
+            # If we get here, we failed to find a spot after max attempts
+            # Try one last time without collision checks as a fallback
+            x = random.randint(0, self.game.width - self.block_size)
+            y = random.randint(50, 550 - self.block_size)
+            critter_data = random.choice(self.level_data['critters'])
+            new_food = Food(x, y, critter_data, self.block_size)
+            self.food.append(new_food)
+            return True
 
-            # Snap to the city grid if needed
-            if self.level_data['biome'] == 'city':
-                x = round(x / self.block_size) * self.block_size
-                y = round(y / self.block_size) * self.block_size
+        else:  # Regular level spawning logic
+            while attempts < max_attempts:
+                # Calculate grid-aligned positions
+                grid_x = random.randint(0, (self.game.width - self.block_size) // self.block_size)
+                grid_y = random.randint(self.play_area['top'] // self.block_size, 
+                                      (self.play_area['bottom'] - self.block_size) // self.block_size)
+                
+                # Convert to pixel coordinates
+                x = grid_x * self.block_size
+                y = grid_y * self.block_size
 
-            # 1) Check standard collisions & BFS reachability
-            if not self.is_safe_position(x, y):
-                continue
-            if not self.is_reachable_by_snake(x, y):
-                continue
+                # Create rect for the food
+                food_rect = pygame.Rect(x, y, self.block_size, self.block_size)
+                buffer_rect = food_rect.copy()
+                buffer_rect.height += self.block_size
+                buffer_rect.y -= self.block_size
 
-            # 2) If we're in the city, also skip if this position sits on a building top
-            if self.level_data['biome'] == 'city' and self._overlaps_building_top(x, y):
-                continue
+                # Check collision with obstacles
+                collision_found = False
+                for obstacle in self.obstacles:
+                    if not hasattr(obstacle, 'get_no_spawn_rects'):
+                        hitbox = obstacle.get_hitbox()
+                        if hitbox is None:
+                            continue
+                        if isinstance(hitbox, list):
+                            for box in hitbox:
+                                if buffer_rect.colliderect(box):
+                                    collision_found = True
+                                    break
+                        elif buffer_rect.colliderect(hitbox):
+                            collision_found = True
+                    else:
+                        # For obstacles with no_spawn_rects
+                        no_spawn_rects = obstacle.get_no_spawn_rects()
+                        for rect in no_spawn_rects:
+                            if buffer_rect.colliderect(rect):
+                                collision_found = True
+                                break
 
-            # If all checks passed, spawn the food
-            self.food = Food(x, y, random.choice(self.level_data['critters']))
-            return
-
-        # If we exhausted attempts, fallback to center
-        fallback_x = self.game.width // 2
-        fallback_y = (self.play_area['top'] + self.play_area['bottom']) // 2
-        self.food = Food(fallback_x, fallback_y, random.choice(self.level_data['critters']))
-
-    def _overlaps_building_top(self, x, y):
-        """
-        Checks if the 1-tile food at (x,y) overlaps any building's top rectangle.
-        """
-        food_rect = pygame.Rect(x, y, self.block_size, self.block_size)
-        for obs in self.obstacles:
-            if isinstance(obs, Building):
-                top_rect = obs.get_top_bounding_rect()
-                if food_rect.colliderect(top_rect):
+                    if collision_found:
+                        break
+                
+                # Check collision with snake body
+                if not collision_found:
+                    for segment in self.game.snake.body:
+                        segment_rect = pygame.Rect(segment[0], segment[1], 
+                                                self.block_size, self.block_size)
+                        if buffer_rect.colliderect(segment_rect):
+                            collision_found = True
+                            break
+                
+                # If no collision, spawn food
+                if not collision_found:
+                    critter_data = random.choice(self.level_data['critters'])
+                    new_food = Food(x, y, critter_data, self.block_size)
+                    self.food.append(new_food)
                     return True
-        return False
+                
+                attempts += 1
+        
+        # If we reach here, no spot was found. Use fallback position (grid-aligned)
+        print("Warning: Could not place food after many attempts. Using fallback.")
+        fallback_x = (self.game.width // 2) // self.block_size * self.block_size
+        
+        # Adjust fallback y position based on level type
+        if is_sky_level:
+            fallback_y = 300 // self.block_size * self.block_size  # Middle of sky area
+        else:
+            fallback_y = ((self.play_area['top'] + self.play_area['bottom']) // 2) // self.block_size * self.block_size
+        
+        critter_data = random.choice(self.level_data['critters'])
+        new_food = Food(fallback_x, fallback_y, critter_data, self.block_size)
+        self.food.append(new_food)
+        return True
+
+    def check_food_collision(self, snake):
+        """Check if the snake collides with any food"""
+        snake_rect = pygame.Rect(snake.x, snake.y, snake.block_size, snake.block_size)
+        collided = False
+        
+        for food_item in self.food[:]:  # Use copy of list to safely remove items
+            if snake_rect.colliderect(food_item.get_hitbox()):
+                self.food.remove(food_item)
+                snake.handle_food_eaten()
+                
+                if self.level_data.get('has_target_mountain', False):
+                    if food_item.is_eagle:
+                        self.food_count += 1
+                else:
+                    self.food_count += 1
+                    
+                # Only spawn new food if we haven't completed the level
+                if not self.is_complete():
+                    self.spawn_food()
+                
+                collided = True
+                break  # Exit after first collision
+                
+        return collided
+
+    # Removed: _overlaps_building_top — city-specific and unused in base
 
     def is_safe_position(self, x, y):
-        """
-        Check if a position is free of collisions with obstacles or snake segments.
-        Now we simply loop each obstacle's 'no spawn' rects so we skip them.
-        """
+        """Check if a position is safe for food spawning"""
+        # Create rect for the food
         food_rect = pygame.Rect(x, y, self.block_size, self.block_size)
         
-        # 1) Check each obstacle's no-spawn rects
+        # Add a small buffer zone above for visual clarity
+        buffer_rect = food_rect.copy()
+        buffer_rect.height += self.block_size  # Extend checking area above the food
+        buffer_rect.y -= self.block_size       # Move the buffer up
+        
+        # Check collision with obstacles
         for obstacle in self.obstacles:
-            for blocked_rect in obstacle.get_no_spawn_rects():
-                if food_rect.colliderect(blocked_rect):
+            # Skip if obstacle has no hitbox
+            if not hasattr(obstacle, 'get_no_spawn_rects'):
+                hitbox = obstacle.get_hitbox()
+                if hitbox is None:
+                    continue
+                if isinstance(hitbox, list):
+                    for box in hitbox:
+                        if buffer_rect.colliderect(box):
+                            return False
+                elif buffer_rect.colliderect(hitbox):
                     return False
+                continue
 
-        # 2) Optionally check collision with snake's body if you don't want to spawn on snake
-        if self.game.snake:
-            for segment in self.game.snake.body:
-                segment_rect = pygame.Rect(segment[0], segment[1], 
-                                           self.block_size, self.block_size)
-                if food_rect.colliderect(segment_rect):
+            # For obstacles with no_spawn_rects (buildings, lakes, etc)
+            no_spawn_rects = obstacle.get_no_spawn_rects()
+            for rect in no_spawn_rects:
+                if buffer_rect.colliderect(rect):
                     return False
+        
+        # Check collision with snake
+        for segment in self.game.snake.body:
+            if food_rect.colliderect(pygame.Rect(segment[0], segment[1], self.block_size, self.block_size)):
+                return False
+        
+        # Check if within play area
+        if not (self.play_area['top'] <= y <= self.play_area['bottom'] - self.block_size):
+            return False
         
         return True
 
@@ -351,9 +561,21 @@ class BaseLevel:
                         snake_rect = pygame.Rect(nx, ny, snake.block_size, snake.block_size)
                         collision = False
                         for obs in self.obstacles:
-                            hbox = obs.get_hitbox()
-                            if hbox and snake_rect.colliderect(hbox):
-                                collision = True
+                            hitbox = obs.get_hitbox()
+                            if hitbox is None:
+                                continue
+                            
+                            if isinstance(hitbox, list):
+                                # Check against all hitboxes of the obstacle
+                                for box in hitbox:
+                                    if snake_rect.colliderect(box):
+                                        collision = True
+                                        break
+                            else:
+                                if snake_rect.colliderect(hitbox):
+                                    collision = True
+                            
+                            if collision:
                                 break
                         
                         if not collision:
@@ -363,12 +585,80 @@ class BaseLevel:
         return False
     
     def check_collision(self, snake):
+        # Don't check collisions if snake is frozen (e.g. during cutscene)
+        if getattr(snake, 'frozen', False):
+            return False
+        
+        # Get updated position
+        update_result = snake.update()
+        if update_result is None:  # Handle case where update returns None
+            return False
+        
+        new_x, new_y = update_result
+        
+        # Skip collision checks if boss is dying
+        if (self.level_data.get('is_boss', False) and 
+            self.boss and hasattr(self.boss, 'is_dying') and 
+            self.boss.is_dying):
+            return False
+
+        # Clamp snake position at edges instead of collision
+        if snake.x < 0:
+            snake.x = 0
+        elif snake.x >= self.game.width - snake.block_size:
+            snake.x = self.game.width - snake.block_size
+        
+        # For sky level, allow full vertical movement
+        if not self.level_data.get('full_sky', False):
+            if snake.y < self.play_area['top']:
+                snake.y = self.play_area['top']
+            elif snake.y >= self.play_area['bottom'] - snake.block_size:
+                snake.y = self.play_area['bottom'] - snake.block_size
+
+        # Continue with other collision checks...
         new_x, new_y = snake.update()
         
-        # NEW: Snap first, then clamp
-        if self.level_data['biome'] == 'city':
-            new_x = round(new_x / snake.block_size) * snake.block_size
-            new_y = round(new_y / snake.block_size) * snake.block_size
+        # Check projectile collisions BEFORE clamping position
+        if self.boss:
+            for proj in self.boss.projectiles[:]:
+                proj_rect = pygame.Rect(proj['x'], proj['y'], 10, 10)
+                
+                # Check collision with head at new position
+                head_rect = pygame.Rect(new_x, new_y, 
+                                      snake.block_size, snake.block_size)
+                
+                # Check collision with rest of body at current positions
+                hit = False
+                if proj_rect.colliderect(head_rect):
+                    hit = True
+                else:
+                    for segment in snake.body[:-1]:  # Exclude head which we already checked
+                        segment_rect = pygame.Rect(segment[0], segment[1],
+                                                 snake.block_size, snake.block_size)
+                        if proj_rect.colliderect(segment_rect):
+                            hit = True
+                            break
+                
+                if hit:
+                    self.boss.projectiles.remove(proj)
+                    if not snake.is_powered_up:
+                        if len(snake.body) > 1:
+                            # Just lose a segment if we have extra length
+                            snake.lose_segment()
+                        else:
+                            # Die if we're just a head
+                            snake.die()
+                            return True
+
+        # NEW: Store the original position for potential rollback
+        original_x, original_y = snake.x, snake.y
+        last_dx, last_dy = snake.dx, snake.dy
+        
+        # If the snake has new input this frame, we'll be more forgiving
+        has_new_input = snake.has_input_this_frame
+        
+        # Allow subclasses to adjust player movement (e.g., city snapping)
+        new_x, new_y = self.adjust_player_movement(new_x, new_y, snake)
 
         hit_wall = False
         # Clamp X within bounds
@@ -387,15 +677,43 @@ class BaseLevel:
             new_y = self.play_area['top']
             hit_wall = True
 
-        snake.move_to(new_x, new_y)
-
-        # Check obstacle collision - use the full snake rectangle
-        snake_rect = pygame.Rect(new_x, new_y, snake.block_size, snake.block_size)
+        # NEW: Only temporarily move snake to check collision
+        temp_x, temp_y = new_x, new_y
+        
+        # Check obstacle collision with slightly smaller hitbox
+        hitbox_size = int(snake.block_size * 0.8)
+        offset = (snake.block_size - hitbox_size) // 2
+        snake_rect = pygame.Rect(temp_x + offset, temp_y + offset, hitbox_size, hitbox_size)
+        
+        will_collide = False
+        colliding_obstacle = None
         
         for obstacle in self.obstacles:
             hitbox = obstacle.get_hitbox()
             if hitbox is not None:
-                if snake_rect.colliderect(hitbox):
+                collision = False
+                if isinstance(hitbox, list):
+                    for box in hitbox:
+                        # Ensure box is a valid pygame.Rect
+                        if not isinstance(box, pygame.Rect):
+                            try:
+                                box = pygame.Rect(*box)
+                            except Exception:
+                                continue
+                        if snake_rect.colliderect(box):
+                            collision = True
+                            break
+                elif isinstance(hitbox, pygame.Rect):
+                    collision = snake_rect.colliderect(hitbox)
+                elif isinstance(hitbox, (list, tuple)) and len(hitbox) == 4:
+                    try:
+                        h_rect = pygame.Rect(*hitbox)
+                    except Exception:
+                        rect = None
+                    if rect and snake_rect.colliderect(rect):
+                        collision = True
+                        break
+                if collision:
                     # Skip if already being destroyed or discharged
                     if hasattr(obstacle, 'is_being_destroyed') and obstacle.is_being_destroyed:
                         continue
@@ -405,102 +723,198 @@ class BaseLevel:
                     if snake.is_powered_up:
                         obstacle.start_destruction()
                         snake.destroy_obstacle()
-                        return False
+                        will_collide = False
                     else:
-                        snake.die()
-                        return True
+                        will_collide = True
+                        colliding_obstacle = obstacle
+                        break
+
+        # NEW: If we would collide but have recent input, try the previous position
+        if will_collide and snake.has_input_this_frame:
+            # Create a rect for the previous position
+            prev_rect = pygame.Rect(
+                original_x + offset, 
+                original_y + offset, 
+                hitbox_size, hitbox_size
+            )
+            
+            # Check if the previous position was safe
+            was_safe = True
+            for obstacle in self.obstacles:
+                hitbox = obstacle.get_hitbox()
+                if hitbox is not None:
+                    if isinstance(hitbox, list):
+                        if any(box.colliderect(prev_rect) for box in hitbox):
+                            was_safe = False
+                            break
+                    elif hitbox.colliderect(prev_rect):
+                        was_safe = False
+                        break
+            
+            if was_safe:
+                # Stay at previous position and apply new input
+                snake.move_to(original_x, original_y)
+                # Clear collision flag since we're safe
+                will_collide = False
+                # Give a small boost to help with tight turns
+                if snake.dx != 0:  # If moving horizontally
+                    # Allow slight vertical position adjustment
+                    test_y = original_y + (snake.dy * 0.5)  # Try moving halfway
+                    test_rect = prev_rect.copy()
+                    test_rect.y = test_y + offset
+                    if not any(self._hitbox_collides(obstacle, test_rect) for obstacle in self.obstacles):
+                        snake.move_to(original_x, test_y)
+                elif snake.dy != 0:  # If moving vertically
+                    # Allow slight horizontal position adjustment
+                    test_x = original_x + (snake.dx * 0.5)  # Try moving halfway
+                    test_rect = prev_rect.copy()
+                    test_rect.x = test_x + offset
+                    if not any(self._hitbox_collides(obstacle, test_rect) for obstacle in self.obstacles):
+                        snake.move_to(test_x, original_y)
+            else:
+                # Actually move to the collision position
+                snake.move_to(temp_x, temp_y)
+        else:
+            # No collision or no new input, move normally
+            snake.move_to(temp_x, temp_y)
+
+        if will_collide:
+            snake.die()
+            return True
         
-        # If we clamped to a wall, let the snake bounce after obstacle checks
+        # If we clamped to a wall, let the snake bounce
         if hit_wall:
             snake.bounce()
             return False
         
         # Check self collision last
-        head = [new_x, new_y]
+        head = [snake.x, snake.y]
         if head in snake.body[:-1] and len(snake.body) > 1:
             snake.die()
             return True
         
-        return False
-    
-    def check_food_collision(self, snake):
-        if not self.food:
-            return False
-        
-        snake_rect = pygame.Rect(snake.x, snake.y, 
-                               snake.block_size, snake.block_size)
-        food_rect = pygame.Rect(self.food.x, self.food.y, 
-                              self.block_size, self.block_size)
-        
-        if snake_rect.colliderect(food_rect):
-            self.food_count += 1
-            snake.handle_food_eaten()
-            self.spawn_food()
+        # Return True if snake died during this update (from any cause)
+        if snake.is_dead:
             return True
+        
         return False
     
     def is_complete(self):
-        if self.level_data['biome'] == 'city':
-            return self.buildings_destroyed >= self.required_buildings
-        else:
-            return self.food_count >= self.required_food
+        # For boss levels, check if boss is defeated and death animation is complete
+        if self.level_data.get('is_boss', False):
+            # If boss is still present and not dying, level is not complete
+            if self.boss and not hasattr(self.boss, 'is_dying'):
+                return False
+            # If boss is dying but death animation is not complete, level is not complete
+            if self.boss and hasattr(self.boss, 'is_dying') and self.boss.is_dying:
+                return False
+            # If boss is None (removed after death animation), level is complete
+            if self.boss is None:
+                return True
+            return False
+
+        # City completion handled by CityLevel subclass
+        
+        # For mountain levels that require eagle or other special conditions
+        if self.level_data.get('has_target_mountain', False):
+            # Check if we've collected the eagle
+            if self.food_count >= self.required_food:
+                # If we have the eagle but haven't played the ending cutscene yet
+                if not self.ending_cutscene_played and 'ending' in self.cutscenes and not self.current_cutscene:
+                    self.ending_cutscene_played = True
+                    self.trigger_cutscene('ending')
+                    return False  # Don't complete level until cutscene has played
+                elif self.current_cutscene:
+                    return False  # Don't complete level while cutscene is playing
+                else:
+                    return True   # Complete level after cutscene has finished
+            return False  # Haven't collected the eagle yet
+        
+        # For sky levels (full_sky), check if defeated_snakes >= 3 AND ending cutscene has played
+        if self.level_data.get('full_sky', False) and not self.level_data.get('is_space', False):
+            # Only return true if the ending cutscene has been triggered and completed
+            if self.defeated_snakes >= 3:
+                if not self.ending_cutscene_played:
+                    # If snakes are defeated but cutscene hasn't played, trigger it
+                    if 'ending' in self.cutscenes and not self.current_cutscene:
+                        self.ending_cutscene_played = True
+                        self.trigger_cutscene('ending')
+                    return False  # Don't complete level until cutscene has played
+                elif self.current_cutscene:
+                    return False  # Don't complete level while cutscene is playing
+                else:
+                    return True   # Complete level after cutscene has finished
+            return False  # Not enough snakes defeated
+        
+        # For all other levels (including space), use food_count >= required_food
+        return self.food_count >= self.required_food
     
     def draw(self, surface):
-        # Draw sky, etc. first
+        # Draw background
         self.draw_background(surface)
+        
+        # Delegate to subclass-customizable scene drawing
+        self.draw_scene(surface)
 
-        if self.level_data['biome'] == 'city':
-            # 1) Draw all non-building obstacles
-            for obstacle in self.obstacles:
-                if not isinstance(obstacle, Building):
-                    obstacle.draw(surface)
+        # Draw developer overlay if enabled
+        if getattr(self.game, 'dev_show_overlay', False):
+            self.draw_debug_overlay(surface)
 
-            # 2) Draw entire building (if being destroyed) or just base
-            for building in [obs for obs in self.obstacles if isinstance(obs, Building)]:
-                if building.is_being_destroyed:
-                    building.draw(surface)
-                else:
-                    building.draw_base(surface)
-
-            # 3) Always draw snake (instead of skipping if "behind")
-            #    This way, any building top drawn afterward will cover overlap.
-            self.game.snake.draw(surface)
-
-            # 4) Draw the building tops after the snake to create occlusion
-            for building in [obs for obs in self.obstacles if isinstance(obs, Building)]:
-                if building.is_being_destroyed:
-                    # Already drawn the destruction effect
-                    continue
-                else:
-                    building.draw_top(surface)
-        else:
-            # Original logic for other biomes
-            for obstacle in self.obstacles:
-                obstacle.draw(surface)
-            self.game.snake.draw(surface)
-
-        # Draw food, cutscenes, etc. after
-        if self.food:
-            self.food.draw(surface)
+        # Draw cutscenes last
         if self.current_cutscene:
             self.current_cutscene.draw(surface)
+        
+        # Draw boss if present
+        if self.boss:
+            if hasattr(self.boss, 'is_dying') and self.boss.is_dying:
+                self.boss.draw_death_animation(surface)
+            else:
+                self.boss.draw(surface)
+        
+        # Draw enemy snakes if present
+        if self.enemy_snakes:
+            for enemy_snake in self.enemy_snakes:
+                enemy_snake.draw(surface)
     
     def draw_background(self, surface):
         # Draw sky using sky manager
         self.sky_manager.draw(surface)
         
-        # Special handling for city biome
-        if self.level_data['biome'] == 'city':
-            self._draw_city_background(surface)
+        # For space level, draw stars like in the main menu
+        if self.level_data.get('is_space', False):
+            # Draw stars with twinkling effect (using game's stars)
+            time = pygame.time.get_ticks() / 1000
+            for star in self.game.stars:
+                brightness = (math.sin(time * 2 + star['twinkle_offset']) + 1) * 0.5
+                color = tuple(int(255 * brightness) for _ in range(3))
+                pygame.draw.rect(surface, color,
+                               [star['x'], star['y'], star['size'], star['size']])
+                
+            # Add shooting stars less frequently
+            if random.random() < 0.005:
+                start_x = random.randint(0, self.game.width)
+                start_y = random.randint(0, self.game.height // 2)
+                for i in range(10):
+                    x = start_x + i * 4
+                    y = start_y + i * 4
+                    size = 3 - (i // 4)
+                    if size > 0:
+                        pygame.draw.rect(surface, (255, 255, 255),
+                                       [x, y, size, size])
+            return
+        
+        # Special handling for different biomes
+        if self.level_data['biome'] == 'sky':
+            # Sky level doesn't need additional background drawing
+            pass
         else:
             # Original background drawing for desert/forest
             ground_colors = self.level_data['background_colors']['ground']
             ground_height = self.play_area['bottom'] - self.play_area['top']
             
-            # First fill with base color
             pygame.draw.rect(surface, ground_colors[-1],
-                            [0, self.play_area['top'], 
-                             self.game.width, ground_height])
+                           [0, self.play_area['top'], 
+                            self.game.width, ground_height])
             
             # Draw pixelated ground pattern
             block_size = 8
@@ -512,41 +926,7 @@ class BaseLevel:
                         pygame.draw.rect(surface, ground_colors[color_index],
                                        [x, y + offset, block_size, block_size])
 
-    def _draw_city_background(self, surface):
-        road_colors = self.level_data['background_colors']['ground']
-        road_line_color = self.level_data['background_colors']['road_lines']
-        block_size = 160
-        road_width = 60
-
-        # Fill background with base road color
-        pygame.draw.rect(surface, road_colors[0],
-                         [0, self.play_area['top'],
-                          self.game.width, self.play_area['bottom'] - self.play_area['top']])
-
-        # Draw vertical roads first (shift them so none extends above the sky)
-        vertical_road_top = self.play_area['top'] + road_width // 2
-        for x in range(0, self.game.width + block_size, block_size):
-            pygame.draw.rect(surface, road_colors[1],
-                             [x - road_width // 2, vertical_road_top,
-                              road_width, self.play_area['bottom'] - vertical_road_top])
-            
-            # Dashed white lines
-            center_x = x - 2
-            for y in range(vertical_road_top, self.play_area['bottom'], 30):
-                pygame.draw.rect(surface, road_line_color, [center_x, y, 4, 20])
-
-        # Draw horizontal roads (clamp the top side to avoid overlapping sky)
-        for y in range(vertical_road_top, self.play_area['bottom'] + block_size, block_size):
-            actual_y = y - road_width // 2
-            if actual_y < self.play_area['top']:
-                actual_y = self.play_area['top']
-            
-            pygame.draw.rect(surface, road_colors[1],
-                             [0, actual_y, self.game.width, road_width])
-
-            # Dashed white lines
-            for x in range(0, self.game.width, 30):
-                pygame.draw.rect(surface, road_line_color, [x, actual_y + road_width//2 - 2, 20, 4])
+    # City and mountain background helpers moved to subclasses
     
     def update(self):
         # Update cutscene if active
@@ -558,134 +938,183 @@ class BaseLevel:
         
         self.sky_manager.update()
         
-        # Update all obstacles
-        for obs in self.obstacles[:]:  # iterate over a copy, so we can remove
-            if obs.update_destruction():
-                if obs.is_being_destroyed and obs.can_be_destroyed:
-                    # >>> NEW: If this is a city building, increment buildings_destroyed
-                    if self.level_data['biome'] == 'city' and isinstance(obs, Building):
-                        self.buildings_destroyed += 1
-                    # <<< end NEW
+        # Update boss if present
+        if self.boss:
+            if hasattr(self.boss, 'is_dying') and self.boss.is_dying:
+                self.boss.death_timer += 1
+                if self.boss.death_timer >= self.boss.death_duration:
+                    self.boss = None  # Remove boss after death animation
+            else:
+                self.boss.update()
+                
+                # Check if powered-up snake hits boss
+                if self.game.snake.is_powered_up:
+                    snake_rect = pygame.Rect(
+                        self.game.snake.x, 
+                        self.game.snake.y,
+                        self.game.snake.block_size,
+                        self.game.snake.block_size
+                    )
+                    boss_rect = pygame.Rect(
+                        self.boss.x,
+                        self.boss.y,
+                        self.boss.width,
+                        self.boss.height
+                    )
+                    if snake_rect.colliderect(boss_rect):
+                        damage = self.boss.take_damage()
+                        self.boss_health = max(0, self.boss_health - damage)
+                        # Start grace window rather than immediate consumption
+                        self.game.snake.destroy_obstacle()
+                
+                # Check if boss health reaches 0
+                if self.boss_health <= 0 and not hasattr(self.boss, 'is_dying'):
+                    self.boss.start_death_animation()
+
+        # Ensure destruction animations get updated each frame
+        for obstacle in self.obstacles[:]:
+            if obstacle.is_being_destroyed or obstacle.is_discharging:
+                # Update destruction/discharge timer
+                destruction_complete = obstacle.update_destruction()
+                if destruction_complete:
+                    # Allow subclasses to handle special effects before removal
+                    self.on_obstacle_destroyed(obstacle)
                     
-                    # If it's a building in the city, spawn rubble
-                    if isinstance(obs, Building) and self.level_data['biome'] == 'city':
-                        # Create rubble with same dimensions as building
-                        new_rubble = Rubble(
-                            obs.x,
-                            obs.y,
-                            {
-                                'variant': random.choice([1, 2, 3]),
-                                'width': obs.variations['width'],
-                                'height': obs.variations['height'],
-                                'base_height': obs.base_height
-                            },
-                            obs.block_size
-                        )
-                        self.obstacles.append(new_rubble)
-                    
-                    # Remove the destroyed obstacle from the list
+                    # Remove the destroyed obstacle
+                    self.obstacles.remove(obstacle)
+            
+        # Handle river drying animation separately
+        for obs in self.obstacles[:]:
+            if isinstance(obs, River) and obs.drying_up:
+                obs.dry_timer += 1
+                if obs.dry_timer >= obs.dry_duration:
                     self.obstacles.remove(obs)
+        
+        # Update snake projectiles
+        if self.game.snake.projectiles:
+            for proj in self.game.snake.projectiles[:]:
+                # Update position
+                proj['x'] += proj['dx']
+                proj['y'] += proj['dy']
+                proj['lifetime'] -= 1
+                
+                if proj['lifetime'] <= 0:
+                    self.game.snake.projectiles.remove(proj)
+                    continue
+                
+                # Check collision with boss
+                if self.boss:
+                    proj_rect = pygame.Rect(proj['x'] - 4, proj['y'] - 4, 8, 8)
+                    boss_rect = pygame.Rect(
+                        self.boss.x, self.boss.y,
+                        self.boss.width, self.boss.height
+                    )
+                    
+                    if proj_rect.colliderect(boss_rect):
+                        self.game.snake.projectiles.remove(proj)
+                        damage = self.boss.take_damage()
+                        self.boss_health = max(0, self.boss_health - damage // 5)  # 1/5th of normal damage
+        
+        # Update enemy snakes if present
+        if self.enemy_snakes:
+            for enemy_snake in self.enemy_snakes[:]:  # Use slice copy to allow removal
+                new_x, new_y = enemy_snake.update()
+                
+                if enemy_snake.is_dead:
+                    # Remove enemy snake if it's fallen sufficiently below the play area
+                    if enemy_snake.y > self.play_area['bottom'] + 50:  # Changed from game.height
+                        self.enemy_snakes.remove(enemy_snake)
+                        if self.level_data.get('full_sky', False):
+                            self.defeated_snakes += 1  # Increment counter when snake dies
+                    continue
+                
+                if new_x is not None:
+                    # Check if we're about to hit a wall
+                    will_hit_vertical_wall = new_x < 0 or new_x >= self.game.width - enemy_snake.block_size
+                    will_hit_horizontal_wall = new_y < self.play_area['top'] or new_y >= self.play_area['bottom'] - enemy_snake.block_size
+                    
+                    # If we're going to hit a wall, force a direction change
+                    if will_hit_vertical_wall:
+                        enemy_snake.dx = 0  # Stop horizontal movement
+                        # If not already moving vertically, start
+                        if enemy_snake.dy == 0:
+                            # Choose vertical direction based on target
+                            if self.food:
+                                enemy_snake.dy = (self.block_size if self.food[-1].y > enemy_snake.y 
+                                               else -self.block_size)
+                    elif will_hit_horizontal_wall:
+                        enemy_snake.dy = 0  # Stop vertical movement
+                        # If not already moving horizontally, start
+                        if enemy_snake.dx == 0:
+                            # Choose horizontal direction based on target
+                            if self.food:
+                                enemy_snake.dx = (self.block_size if self.food[-1].x > enemy_snake.x 
+                                               else -self.block_size)
+                    
+                    # Always clamp position
+                    new_x = max(0, min(new_x, self.game.width - enemy_snake.block_size))
+                    new_y = max(self.play_area['top'], 
+                             min(new_y, self.play_area['bottom'] - enemy_snake.block_size))
+                    enemy_snake.move_to(new_x, new_y)
+                
+                # Check food collision for enemy snake
+                if self.food:
+                    collided = self.check_food_collision(enemy_snake)
+                    if collided:
+                        enemy_snake.grow()
+                
+                # Check powered-up collision between snakes
+                if self.game.snake.is_powered_up or enemy_snake.is_powered_up:
+                    self._check_snake_collision(enemy_snake)
+                
+                # Check projectile collisions
+                self._check_projectile_collisions(enemy_snake)
     
     def find_safe_spawn_for_snake(self, snake):
-        max_attempts = 100
+        """Locate a collision-free spot for the snake to start."""
+        max_attempts = 300
         attempts = 0
-        
-        if self.level_data['biome'] == 'city':
-            block_size = 160
-            road_width = 60
-            
-            # Define the horizontal roads (the same way as before)
-            safe_y_positions = []
-            vertical_road_top = self.play_area['top'] + road_width // 2
-            first_block_y = vertical_road_top + road_width // 2
-            
-            # Add first road position
-            safe_y_positions.append(self.play_area['top'] + block_size // 2)
-            # Add subsequent road positions
-            current_y = first_block_y + block_size
-            while current_y < self.play_area['bottom']:
-                safe_y_positions.append(current_y - road_width // 2)
-                current_y += block_size
-            
-            # Prepare a list of park rectangles to spawn in
-            park_rects = []
-            for x, y, width, height in (self.park_positions or []):
-                # Here x, y, width, and height are the raw block positions scaled for obstacles,
-                # so just treat them as the bounding rectangle for the park.
-                # If we want to convert them exactly to game-space, check how they're used in _create_obstacles().
-                park_rects.append(pygame.Rect(x, y, width, height))
-            
-            while attempts < max_attempts:
-                # Decide whether to spawn on road or in a park
-                if len(park_rects) > 0 and random.random() < 0.3:
-                    # 30% chance: pick a random park
-                    rect = random.choice(park_rects)
-                    # pick a random point in that park rect
-                    x = random.randrange(rect.left, rect.right - snake.block_size)
-                    y = random.randrange(rect.top, rect.bottom - snake.block_size)
+
+        while attempts < max_attempts:
+            # Use block_size grid alignment like before
+            grid_x = random.randint(0, (self.game.width - snake.block_size) // snake.block_size)
+            grid_y = random.randint(self.play_area['top'] // snake.block_size,
+                                      (self.play_area['bottom'] - snake.block_size) // snake.block_size)
+
+            x = grid_x * snake.block_size
+            y = grid_y * snake.block_size
+
+            # Check collision with obstacles based on their primary hitboxes
+            collision = False
+            for obstacle in self.obstacles:
+                hitbox = obstacle.get_hitbox()
+                if hitbox is None:
+                    continue
+
+                if isinstance(hitbox, list):
+                    for box in hitbox:
+                        if pygame.Rect(x, y, snake.block_size, snake.block_size).colliderect(box):
+                            collision = True
+                            break
+                    if collision:
+                        break
                 else:
-                    # 70% chance: pick a horizontal road
-                    y_choice = random.choice(safe_y_positions)
-                    x = random.randrange(road_width, self.game.width - road_width)
-                    y = y_choice
-                
-                # Round to grid
-                x = round(x / snake.block_size) * snake.block_size
-                y = round(y / snake.block_size) * snake.block_size
-                
-                # Check if position is safe (no collisions with obstacles, etc.)
-                snake_rect = pygame.Rect(x, y, snake.block_size, snake.block_size)
-                
-                # Add padding around obstacles for safer spawn
-                padding = snake.block_size * 2
-                padded_rect = snake_rect.inflate(padding, padding)
-                
-                collision = False
-                for obstacle in self.obstacles:
-                    hitbox = obstacle.get_hitbox()
-                    if hitbox is not None and padded_rect.colliderect(hitbox):
+                    if pygame.Rect(x, y, snake.block_size, snake.block_size).colliderect(hitbox):
                         collision = True
                         break
-                
-                if not collision:
-                    snake.reset(x, y)
-                    return
-                
-                attempts += 1
-            
-            # Guaranteed safe fallback: middle of first road, away from edges
-            fallback_x = self.game.width // 2
-            fallback_y = safe_y_positions[0]
-            snake.reset(fallback_x, fallback_y)
-        
-        else:
-            # Original spawn logic for other biomes
-            while attempts < max_attempts:
-                if attempts < 20:
-                    x = self.game.width // 2 + random.randint(-100, 100)
-                    y = (self.play_area['top'] + self.play_area['bottom']) // 2 + random.randint(-100, 100)
-                else:
-                    x = random.randrange(0, self.game.width - snake.block_size)
-                    y = random.randrange(self.play_area['top'], self.play_area['bottom'] - snake.block_size)
-                
-                x = round(x / snake.block_size) * snake.block_size
-                y = round(y / snake.block_size) * snake.block_size
-                
-                snake_rect = pygame.Rect(x, y, snake.block_size, snake.block_size)
-                padded_rect = snake_rect.inflate(snake.block_size * 2, snake.block_size * 2)
-                
-                collision = False
-                for obstacle in self.obstacles:
-                    hitbox = obstacle.get_hitbox()
-                    if hitbox is not None and padded_rect.colliderect(hitbox):
-                        collision = True
-                        break
-                
-                if not collision:
-                    snake.reset(x, y)
-                    return
-                
-                attempts += 1
+
+            # Also check if this spot collides with any no-spawn areas (such as building tops or mountain parts)
+            if not collision and not self._collides_with_no_spawn(x, y):
+                snake.reset(x, y)
+                return
+
+            attempts += 1
+
+        # Fallback if no valid spot found - also grid aligned
+        fallback_x = (self.game.width // 2) // snake.block_size * snake.block_size
+        fallback_y = ((self.play_area['top'] + self.play_area['bottom']) // 2) // snake.block_size * snake.block_size
+        print("Warning: Could not find safe snake spawn. Using fallback position.")
+        snake.reset(fallback_x, fallback_y)
     
     def start_intro_cutscene(self):
         self.game.music_manager.stop_music()
@@ -703,14 +1132,298 @@ class BaseLevel:
         self.game.snake.is_sleeping = False
         self.game.snake.emote = None
         self.game.snake.look_at(None)
+        
+        # Reset ascension state if it exists
+        if hasattr(self.game.snake, 'is_ascending'):
+            self.game.snake.is_ascending = False
+            self.game.snake.ascension_timer = 0
+            self.game.snake.ascension_shake_intensity = 0
+            self.game.snake.dy = 0
+        
+        # Set angry state based on level type
+        if (self.level_data.get('has_target_mountain', False) or 
+            self.level_data.get('full_sky', False)):
+            self.game.snake.is_angry = True
+        else:
+            self.game.snake.is_angry = False
+        
+        # If this is the desert level, snap the snake's position to the grid.
+        if self.level_data.get('biome') == 'desert':
+            snake = self.game.snake
+            snake.x = round(snake.x / snake.block_size) * snake.block_size
+            snake.y = round(snake.y / snake.block_size) * snake.block_size
+        
         # Start appropriate music
         self.game.music_manager.play_game_music(
             self.level_data['biome'], 
             self.night_music
         )
 
+        # Default: enable idle animation; subclasses can change this
+        self.game.snake.enable_idle_animation = True
+        # Subclass hook for custom start behavior (e.g., sky enemies)
+        self.on_start_gameplay()
+
+    # -------------------- Extension hooks for subclasses --------------------
+    def adjust_play_area(self):
+        """Allow subclasses to tweak play area after initial calculation."""
+        pass
+
+    def after_obstacles_initialized(self):
+        """Called after obstacles are initialized. Subclasses may override."""
+        pass
+
+    def on_obstacle_destroyed(self, obstacle):
+        """Called when an obstacle finishes destruction. Subclasses may override."""
+        pass
+
+    def on_start_gameplay(self):
+        """Called at the end of start_gameplay for level-specific setup."""
+        pass
+
+    def adjust_player_movement(self, new_x, new_y, snake):
+        """Give subclasses a chance to adjust player movement (e.g., snapping)."""
+        return new_x, new_y
+
     def trigger_cutscene(self, trigger_id):
         if trigger_id in self.cutscenes:
             cutscene_id = self.cutscenes[trigger_id]
             self.game.music_manager.stop_music()
-            self.current_cutscene = BaseCutscene(self.game, cutscene_id) 
+            # If this is the ending cutscene on a mountain level or sky level, freeze the snake and reset animation
+            if trigger_id == 'ending' and (self.level_data.get('has_target_mountain', False) or self.level_data.get('full_sky', False)):
+                snake = self.game.snake
+                snake.frozen = True  # This will prevent the snake from updating its position
+                snake.animation_time = 0  # Reset animation timer
+                snake.wobble_offset = 0  # Reset wobble animation
+                snake.update_position = False  # Stop position updates
+            self.current_cutscene = BaseCutscene(self.game, cutscene_id)
+
+    def _collides_with_no_spawn(self, x, y):
+        """
+        Checks if a position collides with any obstacle's no spawn rectangles.
+        """
+        food_rect = pygame.Rect(x, y, self.block_size, self.block_size)
+        for obstacle in self.obstacles:
+            if hasattr(obstacle, 'get_no_spawn_rects'):
+                no_spawn_rects = obstacle.get_no_spawn_rects()
+                for rect in no_spawn_rects:
+                    if food_rect.colliderect(rect):
+                        return True
+        return False
+
+    def _hitbox_collides(self, obstacle, rect):
+        """
+        Safely check if the obstacle's hitbox collides with the given rect.
+        Handles single hitboxes, lists of hitboxes, or 4-element tuples.
+        """
+        hitbox = obstacle.get_hitbox()
+        if hitbox is None:
+            return False
+        if isinstance(hitbox, list):
+            for box in hitbox:
+                # Ensure box is a valid pygame.Rect
+                if not isinstance(box, pygame.Rect):
+                    try:
+                        box = pygame.Rect(*box)
+                    except Exception:
+                        continue
+                if rect.colliderect(box):
+                    return True
+            return False
+        elif isinstance(hitbox, pygame.Rect):
+            return rect.colliderect(hitbox)
+        elif isinstance(hitbox, (list, tuple)) and len(hitbox) == 4:
+            try:
+                h_rect = pygame.Rect(*hitbox)
+            except Exception:
+                return False
+            return rect.colliderect(h_rect)
+        return False
+
+    def draw_ui(self, surface):
+        # Use the initialized font
+        font = self.game.font
+        score_y = 10
+        
+        if self.level_data.get('full_sky', False) and not self.level_data.get('is_space', False):
+            # Show snake counter for sky level
+            score_text = f"Snakes: {self.defeated_snakes}/3"
+            score_surface = font.render(score_text, True, (255, 255, 255))
+            score_rect = score_surface.get_rect(topleft=(10, score_y))
+            surface.blit(score_surface, score_rect)
+        elif self.level_data.get('has_target_mountain', False):
+            score_text = f"Eagle: {self.food_count}/{self.required_food}"
+            score_surface = font.render(score_text, True, (255, 255, 255))
+            score_rect = score_surface.get_rect(topleft=(10, score_y))
+            surface.blit(score_surface, score_rect)
+        else:
+            # Regular level (including space) - show Food counter
+            score_text = f"Food: {self.food_count}/{self.required_food}"
+            score_surface = font.render(score_text, True, (255, 255, 255))
+            score_rect = score_surface.get_rect(topleft=(10, score_y))
+            surface.blit(score_surface, score_rect)
+
+    def _is_mountain_visible(self, mountain):
+        """
+        Checks if the given mountain's hitbox is at least partially visible within the play area.
+        Returns True if the mountain's hitbox collides with the visible play area rectangle.
+        """
+        hitbox = mountain.get_hitbox()
+        if not hitbox:
+            return False
+        # Define the visible area using the play_area (from self.play_area)
+        visible_rect = pygame.Rect(
+            0,
+            self.play_area['top'],
+            self.game.width,
+            self.play_area['bottom'] - self.play_area['top']
+        )
+        return hitbox.colliderect(visible_rect) 
+
+    def _check_snake_collision(self, enemy):
+        """Handle collision between player and specific enemy snake"""
+        player = self.game.snake
+        
+        # Check head and body segments for both snakes
+        player_segments = [pygame.Rect(x, y, player.block_size, player.block_size) 
+                         for x, y in [*player.body, [player.x, player.y]]]
+        enemy_segments = [pygame.Rect(x, y, enemy.block_size, enemy.block_size) 
+                         for x, y in [*enemy.body, [enemy.x, enemy.y]]]
+        
+        # Check if any segments collide
+        for player_rect in player_segments:
+            for enemy_rect in enemy_segments:
+                if player_rect.colliderect(enemy_rect):
+                    SNAKE_DAMAGE = 5  # Damage dealt by powered-up snake
+                    
+                    # If both powered up, both take damage. Player keeps a brief grace window.
+                    if player.is_powered_up and enemy.is_powered_up:
+                        player.take_snake_damage(SNAKE_DAMAGE)
+                        enemy.take_snake_damage(SNAKE_DAMAGE)
+                        player.start_powerup_grace()
+                        enemy.is_powered_up = False
+                    # If only player powered up, enemy takes damage and dies
+                    elif player.is_powered_up:
+                        enemy.take_snake_damage(SNAKE_DAMAGE)
+                        enemy.is_dead = True  # Make sure enemy is marked as dead
+                        # Start grace window for chaining hits
+                        player.start_powerup_grace()
+                    # If only enemy powered up, player takes damage
+                    elif enemy.is_powered_up:
+                        player.take_snake_damage(SNAKE_DAMAGE)
+                        enemy.is_powered_up = False
+                    return  # Exit after first collision
+
+    def _check_projectile_collisions(self, enemy):
+        """Handle projectile collisions between snakes"""
+        player = self.game.snake
+        
+        # Check player projectiles hitting enemy
+        for proj in player.projectiles[:]:
+            proj_rect = pygame.Rect(proj['x'] - 4, proj['y'] - 4, 8, 8)
+            
+            # Check against enemy head and body segments
+            enemy_segments = [pygame.Rect(x, y, enemy.block_size, enemy.block_size) 
+                           for x, y in [*enemy.body, [enemy.x, enemy.y]]]
+            
+            for segment in enemy_segments:
+                if proj_rect.colliderect(segment):
+                    player.projectiles.remove(proj)
+                    enemy.take_snake_damage(1)  # 1 segment damage
+                    enemy.flash_timer = 10
+                    enemy.is_flashing = True
+                    if len(enemy.body) <= 1:  # If enemy has no segments left
+                        enemy.is_dead = True  # Mark enemy as dead
+                    break  # Stop checking other segments once hit
+        
+        # Check enemy projectiles hitting player
+        for proj in enemy.projectiles[:]:
+            proj_rect = pygame.Rect(proj['x'] - 4, proj['y'] - 4, 8, 8)
+            
+            # Check against player head and body segments
+            player_segments = [pygame.Rect(x, y, player.block_size, player.block_size) 
+                            for x, y in [*player.body, [player.x, player.y]]]
+            
+            for segment in player_segments:
+                if proj_rect.colliderect(segment):
+                    enemy.projectiles.remove(proj)
+                    player.take_snake_damage(1)  # 1 segment damage
+                    player.flash_timer = 10
+                    player.is_flashing = True
+                    break  # Stop checking other segments once hit
+
+    def _check_collision_with_food(self, snake):
+        """Check if given snake collides with any food item"""
+        if not self.food:
+            return False
+            
+        snake_rect = pygame.Rect(snake.x, snake.y, snake.block_size, snake.block_size)
+        # Instead of checking only the last food item, check all food items
+        for food_item in self.food:
+            if snake_rect.colliderect(food_item.get_hitbox()):
+                return True
+        return False 
+    def draw_scene(self, surface):
+        """Default scene draw: obstacles -> food -> player snake."""
+        for obstacle in self.obstacles:
+            obstacle.draw(surface)
+        for food_item in self.food:
+            food_item.draw(surface)
+        self.game.snake.draw(surface)
+
+    def draw_debug_overlay(self, surface):
+        """Draw hitboxes and special regions to help debug levels."""
+        # Play area outline
+        pygame.draw.rect(
+            surface,
+            (0, 255, 0),
+            pygame.Rect(0, self.play_area['top'], self.game.width, self.play_area['bottom'] - self.play_area['top']),
+            1,
+        )
+
+        def _draw_rect(r, color, w=1):
+            if isinstance(r, pygame.Rect):
+                pygame.draw.rect(surface, color, r, w)
+            elif isinstance(r, (list, tuple)) and len(r) == 4:
+                pygame.draw.rect(surface, color, pygame.Rect(*r), w)
+
+        # Obstacle hitboxes
+        for obs in self.obstacles:
+            hb = obs.get_hitbox() if hasattr(obs, 'get_hitbox') else None
+            if hb is None:
+                continue
+            if isinstance(hb, list):
+                for r in hb:
+                    _draw_rect(r, (255, 0, 0), 1)
+            else:
+                _draw_rect(hb, (255, 0, 0), 1)
+            # No-spawn rects
+            if hasattr(obs, 'get_no_spawn_rects'):
+                for r in obs.get_no_spawn_rects():
+                    _draw_rect(r, (255, 255, 0), 1)
+
+        # Food hitboxes
+        for food in self.food:
+            hb = food.get_hitbox() if hasattr(food, 'get_hitbox') else None
+            if hb is None:
+                continue
+            if isinstance(hb, list):
+                for r in hb:
+                    _draw_rect(r, (0, 255, 0), 1)
+            else:
+                _draw_rect(hb, (0, 255, 0), 1)
+
+        # City grid debug
+        if self.level_data.get('biome') == 'city':
+            for positions, color in [
+                (getattr(self, 'building_positions', []) or [], (0, 128, 255)),
+                (getattr(self, 'park_positions', []) or [], (0, 200, 0)),
+                (getattr(self, 'lake_positions', []) or [], (0, 200, 200)),
+            ]:
+                for x, y, w, h in positions:
+                    pygame.draw.rect(surface, color, pygame.Rect(x, y, w, h), 1)
+
+        # Mountain target highlight
+        if self.level_data.get('biome') == 'mountain' and self.target_mountain is not None:
+            hb = self.target_mountain.get_hitbox()
+            _draw_rect(hb, (255, 0, 255), 2)

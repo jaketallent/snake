@@ -13,6 +13,7 @@ class Obstacle:
         self.effect_timer = 0
         self.effect_duration = 30
         self.can_be_destroyed = True
+        self.is_destroyed = False
     
     def start_destruction(self):
         if self.can_be_destroyed:
@@ -39,6 +40,20 @@ class Obstacle:
         time = pygame.time.get_ticks()
         progress = self.effect_timer / self.effect_duration
         
+        # Avoid crashes if no pixels to explode!
+        if not pixels:
+            return
+
+        # Find bounding box of all destruction pixels
+        min_x = min(px for px, py, w, h in pixels)
+        max_x = max(px + w for px, py, w, h in pixels)
+        min_y = min(py for px, py, w, h in pixels)
+        max_y = max(py + h for px, py, w, h in pixels)
+
+        # Explosion center is the bounding box's center
+        center_x = (min_x + max_x) / 2
+        center_y = (min_y + max_y) / 2
+        
         # Colors for the explosion effect (more vibrant)
         explosion_colors = [
             (255, 255, 255),  # White core
@@ -51,12 +66,8 @@ class Obstacle:
         # Draw 8-bit style explosion chunks
         chunk_size = 4  # Size of explosion chunks
         for px, py, w, h in pixels:
-            # Break each pixel into smaller chunks for more detailed explosion
             for cx in range(0, w, chunk_size):
                 for cy in range(0, h, chunk_size):
-                    # Calculate direction from center
-                    center_x = self.x + self.block_size // 2
-                    center_y = self.y + self.block_size // 2
                     dx = (px + cx) - center_x
                     dy = (py + cy) - center_y
                     angle = math.atan2(dy, dx) + random.uniform(-0.2, 0.2)
@@ -121,7 +132,7 @@ class Obstacle:
                             [particle_x, particle_y, size, size])
     
     def draw_discharge_effect(self, surface):
-        """Draw electrical discharge effect"""
+        """Draw electrical discharge effect around all segments"""
         time = pygame.time.get_ticks()
         progress = self.effect_timer / self.effect_duration
         
@@ -133,60 +144,68 @@ class Obstacle:
             (100, 100, 255),  # Darker blue
         ]
         
-        # Get object bounds
-        bounds = self.get_hitbox()
+        # Get all hitboxes
+        hitboxes = self.get_hitbox()
+        if not isinstance(hitboxes, list):
+            hitboxes = [hitboxes]
         
-        # Draw lightning arcs around the object
-        num_arcs = 12
-        for i in range(num_arcs):
-            if time % 2 == 0:  # Flicker effect
-                continue
+        # Draw lightning around each segment
+        for bounds in hitboxes:
+            # Draw lightning arcs around the segment
+            num_arcs = 8
+            for i in range(num_arcs):
+                if time % 2 == 0:  # Flicker effect
+                    continue
+                    
+                # Calculate arc start and end points
+                angle = (i / num_arcs) * math.pi * 2 + (time * 0.01)
+                radius = 20 + math.sin(time * 0.1 + i) * 5
                 
-            # Calculate arc start and end points
-            angle = (i / num_arcs) * math.pi * 2 + (time * 0.01)
-            radius = 20 + math.sin(time * 0.1 + i) * 5
+                start_x = bounds.centerx + math.cos(angle) * radius
+                start_y = bounds.centery + math.sin(angle) * radius
+                
+                # Create a jagged lightning line
+                points = [(start_x, start_y)]
+                num_segments = 3
+                end_angle = angle + random.uniform(-0.5, 0.5)
+                end_x = bounds.centerx + math.cos(end_angle) * (radius * 2)
+                end_y = bounds.centery + math.sin(end_angle) * (radius * 2)
+                
+                for j in range(1, num_segments):
+                    t = j / num_segments
+                    mid_x = start_x + (end_x - start_x) * t
+                    mid_y = start_y + (end_y - start_y) * t
+                    # Add some randomness to middle points
+                    mid_x += random.uniform(-5, 5)
+                    mid_y += random.uniform(-5, 5)
+                    points.append((mid_x, mid_y))
+                
+                points.append((end_x, end_y))
+                
+                # Draw the lightning
+                color = discharge_colors[i % len(discharge_colors)]
+                for p1, p2 in zip(points, points[1:]):
+                    pygame.draw.line(surface, color, p1, p2, 2)
             
-            start_x = bounds.centerx + math.cos(angle) * radius
-            start_y = bounds.centery + math.sin(angle) * radius
-            
-            # Create a jagged lightning line
-            points = [(start_x, start_y)]
-            num_segments = 3
-            end_angle = angle + random.uniform(-0.5, 0.5)
-            end_x = bounds.centerx + math.cos(end_angle) * (radius * 2)
-            end_y = bounds.centery + math.sin(end_angle) * (radius * 2)
-            
-            for j in range(1, num_segments):
-                t = j / num_segments
-                mid_x = start_x + (end_x - start_x) * t
-                mid_y = start_y + (end_y - start_y) * t
-                # Add some randomness to middle points
-                mid_x += random.uniform(-5, 5)
-                mid_y += random.uniform(-5, 5)
-                points.append((mid_x, mid_y))
-            
-            points.append((end_x, end_y))
-            
-            # Draw the lightning
-            color = discharge_colors[i % len(discharge_colors)]
-            for p1, p2 in zip(points, points[1:]):
-                pygame.draw.line(surface, color, p1, p2, 2)
-        
-        # Add some particle effects
-        for _ in range(5):
-            angle = random.uniform(0, math.pi * 2)
-            distance = random.uniform(10, 30)
-            x = bounds.centerx + math.cos(angle) * distance
-            y = bounds.centery + math.sin(angle) * distance
-            size = random.randint(2, 4)
-            color = discharge_colors[random.randint(0, len(discharge_colors)-1)]
-            pygame.draw.rect(surface, color, [x, y, size, size])
+            # Add some particle effects
+            for _ in range(3):
+                angle = random.uniform(0, math.pi * 2)
+                distance = random.uniform(10, 30)
+                x = bounds.centerx + math.cos(angle) * distance
+                y = bounds.centery + math.sin(angle) * distance
+                size = random.randint(2, 4)
+                color = discharge_colors[random.randint(0, len(discharge_colors)-1)]
+                pygame.draw.rect(surface, color, [x, y, size, size])
     
     def get_hitbox(self):
-        # For trees, we need a larger hitbox based on their size
-        if hasattr(self, 'get_custom_hitbox'):
-            return self.get_custom_hitbox()
-        return pygame.Rect(self.x, self.y, self.block_size, self.block_size)
+        """Return a hitbox for the obstacle"""
+        # Default implementation for simple obstacles
+        return pygame.Rect(
+            int(self.x), 
+            int(self.y), 
+            int(self.block_size), 
+            int(self.block_size)
+        )
     
     def draw(self, surface):
         # If we're in destruction or discharge, call the effect
@@ -225,14 +244,6 @@ class Obstacle:
         return rects
 
 class Tree(Obstacle):
-    def get_custom_hitbox(self):
-        # Wider hitbox for larger trees
-        width = self.block_size * (self.variations['width'])
-        height = self.block_size * self.variations['height']
-        # Center the hitbox on the trunk
-        x = self.x - (width - self.block_size) // 2
-        return pygame.Rect(x, self.y, width, height)
-    
     def draw_normal(self, surface):
         if self.is_being_destroyed:
             # Collect all pixels that make up the tree
@@ -339,6 +350,64 @@ class Tree(Obstacle):
                              section_width, 1))
         
         return pixels
+
+    def get_hitbox(self):
+        """Return a list of hitboxes for the tree"""
+        # First try the original simpler hitbox approach
+        width = int(self.block_size * (self.variations['width']))
+        height = int(self.block_size * self.variations['height'])
+        # Center the hitbox on the trunk
+        x = int(self.x - (width - self.block_size) // 2)
+        
+        # Return a single rect for collision checks
+        return pygame.Rect(x, int(self.y), width, height)
+    
+    def get_no_spawn_rects(self):
+        """Return a more precise set of rects for food spawn checks"""
+        hitboxes = []
+        
+        # Convert all dimensions to integers
+        height = int(self.variations['height'] * 24)
+        width = int(self.variations['width'] * 16)
+        trunk_width = max(16, width // 3)
+        
+        # Trunk hitbox
+        hitboxes.append(pygame.Rect(
+            int(self.x),
+            int(self.y),
+            trunk_width,
+            height
+        ))
+        
+        # Leaf hitboxes
+        leaf_sections = 4
+        leaf_height = int(height * 0.7)
+        leaf_start_y = int(self.y)
+        
+        for i in range(leaf_sections):
+            section_width = int(width - (i * width // (leaf_sections * 2)))
+            section_width += int(self.variations.get(f'section_{i}_width', 0))
+            section_x = int(self.x + (trunk_width - section_width) // 2)
+            section_height = leaf_height // leaf_sections
+            offset_x = int(self.variations.get(f'section_{i}_offset', 0))
+            section_x += offset_x
+            
+            hitboxes.append(pygame.Rect(
+                section_x,
+                leaf_start_y + (i * section_height),
+                section_width,
+                section_height
+            ))
+        
+        return hitboxes
+    
+    def check_collision(self, rect):
+        """Check if any of our hitboxes collide with the given rect"""
+        hitboxes = self.get_hitbox()
+        for hitbox in hitboxes:
+            if rect.colliderect(hitbox):
+                return True
+        return False
 
 class Cactus(Obstacle):
     def draw_normal(self, surface):
@@ -540,6 +609,27 @@ class Pond(Obstacle):
         height = self.variations['height'] * 12
         return pygame.Rect(self.x, self.y, width, height)
 
+    def get_no_spawn_rects(self):
+        """
+        Return both the base hitbox and a buffer zone above the lake
+        so that food cannot spawn floating above it.
+        """
+        rects = []
+        base_rect = self.get_hitbox()
+        if base_rect is not None:
+            rects.append(base_rect)
+            
+            # Add a buffer zone above the lake
+            buffer_rect = pygame.Rect(
+                base_rect.x,
+                base_rect.y - self.block_size,  # Extend one block up
+                base_rect.width,
+                self.block_size  # Just the buffer height
+            )
+            rects.append(buffer_rect)
+
+        return rects
+
 class Building(Obstacle):
     def __init__(self, x, y, variations, block_size=20):
         super().__init__(x, y, variations, block_size)
@@ -612,8 +702,7 @@ class Building(Obstacle):
         self._draw_building_section(surface, colors, self.x, self.y, width, base_height)
 
     def draw_top(self, surface):
-        """Draw the building's top portion."""
-        # Use same colors from variations
+        # Use same colors as in variations (or defined defaults)
         colors = self.variations.get('colors', {
             'base': (128, 128, 128),
             'top': (100, 100, 100),
@@ -624,8 +713,6 @@ class Building(Obstacle):
         width = self.variations['width'] * 16
         total_height = self.variations['height'] * 24
         base_height = self.variations['base_height']
-        
-        # Draw the actual building top
         self._draw_building_section(
             surface,
             colors,
@@ -847,10 +934,7 @@ class Building(Obstacle):
                                1)
     
     def get_destruction_pixels(self):
-        """
-        2) Return pixels covering the entire building (top + base).
-           That way, destroying the base triggers a full building explosion.
-        """
+        """Return pixels covering the entire building (top + base)."""
         width = self.variations['width'] * 16
         total_height = self.variations['height'] * 24
         
@@ -866,8 +950,6 @@ class Building(Obstacle):
         base_height = self.variations['base_height']
         width = self.variations['width'] * 16
 
-        # Adjusted to start at self.y - total_height, covering the building's 
-        # entire upper section. The 'top' portion is total_height - base_height high.
         building_rect = pygame.Rect(
             self.x,
             self.y - total_height,
@@ -878,142 +960,139 @@ class Building(Obstacle):
         return snake_rect.colliderect(building_rect)
 
     def get_hitbox(self):
-        """
-        1) Return only the base rectangle so the top is never collidable.
-        """
+        """Return only the base rectangle so the top is never collidable."""
         width = self.variations['width'] * 16
         base_height = self.base_height  # The bottom portion
         return pygame.Rect(self.x, self.y, width, base_height)
 
     def get_top_bounding_rect(self):
-        """Returns the pygame.Rect covering the building's top section."""
-        width = self.variations['width'] * 16
-        total_height = self.variations['height'] * 24
-        base_height = self.variations['base_height']
-        
-        # Use the exact same coordinates as draw_top() uses
+        """Returns the pygame.Rect covering the mountain's top section"""
         return pygame.Rect(
-            self.x,                                     # same x as base
-            self.y - (total_height - base_height),      # same calculation as draw_top
-            width,                                      # same width as base
-            total_height - base_height                  # same height calculation as draw_top
+            self.x + self.width * 0.15,  # Match the visual mountain top
+            self.y,  # Top of mountain
+            self.width * 0.7,  # Width of mountain top
+            self.height - self.base_height  # Height excluding base
         )
 
     def get_no_spawn_rects(self):
-        """
-        Return both the base hitbox and the top bounding rect so that 
-        food cannot spawn behind or on the building top.
-        """
+        """Return both the base hitbox and the top bounding rect for food spawn checks"""
         rects = []
-        base_rect = self.get_hitbox()
-        if base_rect is not None:
-            rects.append(base_rect)
-
-        top_rect = self.get_top_bounding_rect()
-        rects.append(top_rect)
-
-        return rects
+        
+        # Get the base hitbox
+        base_rect = pygame.Rect(
+            self.x, 
+            self.y, 
+            self.variations['width'] * 16,
+            self.variations['base_height']
+        )
+        rects.append(base_rect)
+        
+        # Get the top section hitbox
+        top_height = self.variations['height'] * 24 - self.variations['base_height']
+        if top_height > 0:
+            top_rect = pygame.Rect(
+                self.x,
+                self.y - top_height,  # Start from where the top section begins
+                self.variations['width'] * 16,
+                top_height
+            )
+            rects.append(top_rect)
+        
+        # Add a small buffer zone around both sections
+        buffer_rects = []
+        for rect in rects:
+            buffer_rect = rect.inflate(20, 20)
+            buffer_rect.center = rect.center
+            buffer_rects.append(buffer_rect)
+        
+        return buffer_rects
 
 class Park(Obstacle):
     def __init__(self, x, y, variations, block_size=20):
         super().__init__(x, y, variations, block_size)
-        self.style = random.choice(['playground', 'grove'])
-        
-        width = variations['width'] * 16
-        height = variations['height'] * 12
+        self.width = variations['width']
+        self.height = variations['height']
         
         # Generate static grass pattern once
-        self.grass_pattern = []
-        for x in range(0, width, 4):
-            for y in range(0, height, 4):
-                if random.random() > 0.8:
-                    self.grass_pattern.append((x, y))
+        grass_density = 200
+        self.grass_pattern = [
+            (random.randint(0, self.width-4), random.randint(0, self.height-4))
+            for _ in range(grass_density)
+        ]
         
-        # Generate static elements
+        # Calculate safe margins and element sizes
+        margin = self.width // 6
+        element_width = self.width // 4  # Standard element width
+        
+        # Define safe zones that account for element widths
+        safe_positions = [
+            (margin + element_width//2, self.height//3),  # Left side
+            (self.width - margin - element_width//2, self.height//3),  # Right side
+            (self.width//2, self.height//2),  # Center
+            (margin + element_width//2, self.height*2//3),  # Bottom left
+            (self.width - margin - element_width//2, self.height*2//3)  # Bottom right
+        ]
+        
         self.elements = []
-        if self.style == 'playground':
-            # Add a swing set
+        for pos in safe_positions:
+            elem_type = random.choice(['swings', 'slide', 'monkey_bars', 'tree'])
+            
+            # Calculate element sizes based on available space
+            if elem_type == 'swings':
+                elem_width = min(self.width // 3, element_width)
+            elif elem_type == 'tree':
+                elem_width = min(self.width // 4, element_width)
+            else:
+                elem_width = element_width
+            
+            # Ensure x position keeps element within bounds
+            x = min(max(pos[0], margin + elem_width//2), 
+                   self.width - margin - elem_width//2)
+            
             self.elements.append({
-                'type': 'swings',
-                'x': width // 3,
-                'y': height // 2,
-                'width': 24
+                'type': elem_type,
+                'x': x,
+                'y': pos[1],
+                'width': elem_width
             })
-            
-            # Add either a slide or monkey bars
-            self.elements.append({
-                'type': random.choice(['slide', 'monkey_bars']),
-                'x': width * 2 // 3,
-                'y': height // 2,
-                'width': 16
-            })
-            
-            # Add a few trees around the edges
-            tree_spots = [(width//5, height*3//4), (width*4//5, height*3//4)]
-            for pos in tree_spots:
-                self.elements.append({
-                    'type': 'tree',
-                    'x': pos[0],
-                    'y': pos[1],
-                    'size': 16
-                })
-                
-        else:  # grove style
-            # Add trees in a natural-looking cluster
-            tree_positions = [
-                (width//3, height//3),
-                (width*2//3, height//3),
-                (width//2, height//2),
-                (width//4, height*2//3),
-                (width*3//4, height*2//3)
-            ]
-            
-            for pos in tree_positions:
-                self.elements.append({
-                    'type': 'tree',
-                    'x': pos[0],
-                    'y': pos[1],
-                    'size': random.randint(14, 18)  # Slightly bigger trees
-                })
 
     def draw_normal(self, surface):
-        width = self.variations['width'] * 16
-        height = self.variations['height'] * 12
-        
         # Draw base grass
         grass_colors = [(34, 139, 34), (0, 100, 0)]  # Light and dark green
         pygame.draw.rect(surface, grass_colors[0],
-                        [self.x, self.y, width, height])
+                        [self.x, self.y, self.width, self.height])
         
         # Draw stored grass pattern
         for x, y in self.grass_pattern:
             pygame.draw.rect(surface, grass_colors[1],
                            [self.x + x, self.y + y, 4, 4])
         
-        # Draw all elements
+        # Draw all elements with their stored sizes
         for elem in self.elements:
             if elem['type'] == 'swings':
-                self._draw_swings(surface, self.x + elem['x'], self.y + elem['y'], elem['width'])
+                self._draw_swings(surface, self.x + elem['x'], self.y + elem['y'], 
+                                elem['width'])
             elif elem['type'] == 'slide':
                 self._draw_slide(surface, self.x + elem['x'], self.y + elem['y'])
             elif elem['type'] == 'monkey_bars':
                 self._draw_monkey_bars(surface, self.x + elem['x'], self.y + elem['y'])
             elif elem['type'] == 'tree':
-                self._draw_tree(surface, self.x + elem['x'], self.y + elem['y'], elem['size'])
+                self._draw_tree(surface, self.x + elem['x'], self.y + elem['y'], 
+                              elem['width'])
 
-    def _draw_tree(self, surface, x, y, size):
+    def _draw_tree(self, surface, x, y, width):
         # Simple tree with brown trunk and green leaves
         trunk_color = (139, 69, 19)  # Brown
         leaf_color = (34, 139, 34)   # Forest green
         
         # Trunk
-        pygame.draw.rect(surface, trunk_color, [x - 2, y - size//4, 4, size//2])
+        pygame.draw.rect(surface, trunk_color, [x - 2, y - width//4, 4, width//2])
         
         # Leaves (simple triangle shape)
         leaf_points = [
-            (x, y - size//2),  # Top
-            (x - size//2, y + size//4),  # Bottom left
-            (x + size//2, y + size//4)   # Bottom right
+            (x, y - width//2),  # Top
+            (x - width//2, y + width//4),  # Bottom left
+            (x + width//2, y + width//4)   # Bottom right
         ]
         pygame.draw.polygon(surface, leaf_color, leaf_points)
 
@@ -1060,22 +1139,19 @@ class Park(Obstacle):
 class Lake(Obstacle):
     def __init__(self, x, y, variations, block_size=20):
         super().__init__(x, y, variations, block_size)
-        # --------------------------------------------------
-        # Make lakes discharge instead of being destroyed
         self.can_be_destroyed = False
-        # --------------------------------------------------
+        # Use full dimensions directly
+        self.width = variations['width']
+        self.height = variations['height']
 
     def draw_normal(self, surface):
         if self.is_discharging:
             self.draw_discharge_effect(surface)
         else:
-            width = self.variations['width'] * 16
-            height = self.variations['height'] * 12
-            
-            # Draw base grass border
+            # Draw base grass border to fill entire tile
             grass_colors = [(34, 139, 34), (0, 100, 0)]
             pygame.draw.rect(surface, grass_colors[0],
-                            [self.x, self.y, width, height])
+                           [self.x, self.y, self.width, self.height])
             
             # Animated water with multiple layers
             water_colors = [
@@ -1083,54 +1159,53 @@ class Lake(Obstacle):
                 (30, 144, 255),   # Dodger blue
                 (135, 206, 235),  # Sky blue
             ]
-            margin = 8
+            margin = 10  # Fixed smaller margin instead of relative to width
             
             # Draw water layers with animated edges
             for i, color in enumerate(reversed(water_colors)):
-                shrink = i * 4
+                shrink = i * 4  # Fixed shrink amount
                 water_rect = [
                     self.x + margin + shrink,
                     self.y + margin + shrink,
-                    width - (margin + shrink) * 2,
-                    height - (margin + shrink) * 2
+                    self.width - (margin + shrink) * 2,
+                    self.height - (margin + shrink) * 2
                 ]
                 
                 # Draw water with pixelated edges
-                for px in range(int(water_rect[0]), int(water_rect[0] + water_rect[2]), 4):
-                    for py in range(int(water_rect[1]), int(water_rect[1] + water_rect[3]), 4):
+                pixel_size = 4
+                for px in range(int(water_rect[0]), int(water_rect[0] + water_rect[2]), pixel_size):
+                    for py in range(int(water_rect[1]), int(water_rect[1] + water_rect[3]), pixel_size):
                         if (px == water_rect[0] or 
-                            px >= water_rect[0] + water_rect[2] - 4 or
+                            px >= water_rect[0] + water_rect[2] - pixel_size or
                             py == water_rect[1] or 
-                            py >= water_rect[1] + water_rect[3] - 4):
+                            py >= water_rect[1] + water_rect[3] - pixel_size):
                             if random.random() > 0.7:  # Animated edges
                                 continue
-                        pygame.draw.rect(surface, color, [px, py, 4, 4]) 
-        # --------------------------------------------------
+                        pygame.draw.rect(surface, color, [px, py, pixel_size, pixel_size])
 
     def get_hitbox(self):
-        width = self.variations['width'] * 16
-        height = self.variations['height'] * 12
-        
-        # Create hitbox
-        hitbox = pygame.Rect(self.x, self.y, width, height)
-        
-        # Get the play area bottom from the game instance
-        if hasattr(self, 'game') and self.game and hasattr(self.game, 'current_level'):
-            play_bottom = self.game.current_level.play_area['bottom']
-            # If this is a bottom row lake, extend hitbox to play area bottom
-            if abs(self.y + height - play_bottom) < 50:  # If we're close to the bottom
-                hitbox.height = play_bottom - self.y
-        
-        return hitbox 
+        # Return full-size hitbox
+        return pygame.Rect(self.x, self.y, self.width, self.height)
 
     def get_no_spawn_rects(self):
         """
-        Return a bounding rect covering the entire lake surface.
+        Return both the base hitbox and a buffer zone above the lake
+        so that food cannot spawn floating above it.
         """
         rects = []
-        water_hitbox = self.get_hitbox()  # or a custom water rect if needed
-        if water_hitbox is not None:
-            rects.append(water_hitbox)
+        base_rect = self.get_hitbox()
+        if base_rect is not None:
+            rects.append(base_rect)
+            
+            # Add a buffer zone above the lake
+            buffer_rect = pygame.Rect(
+                base_rect.x,
+                base_rect.y - self.block_size,  # Extend one block up
+                base_rect.width,
+                self.block_size  # Just the buffer height
+            )
+            rects.append(buffer_rect)
+
         return rects
 
 class Rubble(Obstacle):
@@ -1289,13 +1364,440 @@ class Rubble(Obstacle):
                            [ember['x'] + offset_x,
                             ember['y'] + offset_y,
                             size, size])
-            
-            # Occasional spark effect (rising)
-            if random.random() < 0.1:
-                spark_x = ember['x'] + random.randint(-5, 5)
-                spark_y = ember['y'] + random.randint(-5, 0)  # Bias upward
-                pygame.draw.rect(surface, (255, 255, 200),
-                               [spark_x, spark_y, 1, 1])
 
     def get_hitbox(self):
         return None 
+
+class MountainPeak(Obstacle):
+    def __init__(self, x, y, variations, block_size=20):
+        super().__init__(x, y, variations, block_size)
+        self.width = variations['size'] * block_size
+        self.height = variations['size'] * block_size * 1.5
+        self.can_be_destroyed = True
+        self.is_destroyed = False
+        self.destruction_progress = 0  # Add this back
+        
+        # Define mountain colors as instance variables
+        self.mountain_color = (80, 80, 95)  # Darker, slightly blueish gray
+        self.base_color = (70, 70, 85)      # Even darker for the base
+        self.snow_color = (250, 250, 255)   # Pure white with slight blue tint
+        
+        # Define base height (collidable portion)
+        self.base_height = self.height * 0.3  # Bottom 30% is collidable
+
+    def draw(self, surface, offset=None):
+        """Draw the entire mountain, handling both normal and destruction states."""
+        if offset is None:
+            offset = (self.x, self.y)
+        
+        if self.is_being_destroyed:
+            # Get pixels and draw destruction effect
+            pixels = self.get_destruction_pixels()
+            self.draw_destruction_effect(surface, pixels)
+        else:
+            # Normal drawing - base first, then top
+            self.draw_base(surface, offset)
+            self.draw_top(surface, offset)
+
+    def draw_top(self, surface, offset=None):
+        """Draw the non-collidable upper portion of the mountain.
+        If offset is provided, the mountain is drawn at that position; otherwise, it uses (self.x, self.y).
+        """
+        if offset is None:
+            offset = (self.x, self.y)
+        if not self.is_destroyed:
+            mountain_surface = pygame.Surface((self.width + 2, self.height + 2), pygame.SRCALPHA)
+            
+            # Draw main mountain shape using relative coordinates
+            points = [
+                (self.width/2, 0),  # Peak
+                (self.width * 0.85, self.height - self.base_height * 0.8),  # Right
+                (self.width * 0.15, self.height - self.base_height * 0.8)   # Left
+            ]
+            pygame.draw.polygon(mountain_surface, self.mountain_color, points)
+            
+            # Snow cap
+            snow_height = self.height * 0.2
+            snow_width = snow_height * 0.4
+            snow_points = [
+                (self.width/2, 0),
+                (self.width/2 + snow_width, snow_height),
+                (self.width/2 - snow_width, snow_height)
+            ]
+            pygame.draw.polygon(mountain_surface, self.snow_color, snow_points)
+            
+            surface.blit(mountain_surface, offset)
+
+    def draw_base(self, surface, offset=None):
+        """Draw the collidable base portion of the mountain.
+        If offset is provided, the mountain is drawn at that position; otherwise, it uses (self.x, self.y).
+        """
+        if offset is None:
+            offset = (self.x, self.y)
+        if not self.is_destroyed:
+            base_surface = pygame.Surface((self.width + 2, self.height + 2), pygame.SRCALPHA)
+            
+            # Draw only the base portion using relative coordinates
+            base_points = [
+                (0, self.height),  # Bottom left
+                (self.width, self.height),  # Bottom right
+                (self.width * 0.8, self.height - self.base_height),  # Top right
+                (self.width * 0.2, self.height - self.base_height)   # Top left
+            ]
+            pygame.draw.polygon(base_surface, self.base_color, base_points)
+            
+            surface.blit(base_surface, offset)
+
+    def get_destruction_pixels(self):
+        """
+        Returns destruction pixels by sampling the actual drawn mountain shape.
+        The method draws both the top and base onto a temporary surface using a (0,0)
+        offset (so that the shape fills the surface) and then scans the surface in blocks
+        (of size 4x4) to capture opaque areas. This yields explosion chunks that exactly follow
+        the mountain's drawn silhouette.
+        """
+        chunk = 4  # Use the same chunk size as the explosion effect expects.
+        temp_surface = pygame.Surface((self.width + 2, self.height + 2), pygame.SRCALPHA)
+        # Draw the mountain shape at (0,0) in the local coordinate space:
+        self.draw_top(temp_surface, offset=(0, 0))
+        self.draw_base(temp_surface, offset=(0, 0))
+        
+        pixels = []
+        surf_width, surf_height = temp_surface.get_size()
+        # Loop over the temporary surface in steps of 'chunk'
+        for x in range(0, surf_width, chunk):
+            for y in range(0, surf_height, chunk):
+                if temp_surface.get_at((x, y))[3] > 0:
+                    # Convert these coordinates to world coordinates.
+                    world_x = self.x + x - 1
+                    world_y = self.y + y - 1
+                    pixels.append((world_x, world_y, chunk, chunk))
+        return pixels
+
+    def get_hitbox(self):
+        """Return only the base rectangle so the top is never collidable."""
+        if not self.is_destroyed:
+            return pygame.Rect(
+                self.x + self.width * 0.2,  # Adjust x to match visual base
+                self.y + self.height - self.base_height,  # Only the bottom portion
+                self.width * 0.6,  # Base is narrower than full width
+                self.base_height
+            )
+        return None
+
+    def get_top_bounding_rect(self):
+        """Returns the pygame.Rect covering the mountain's top section"""
+        return pygame.Rect(
+            self.x + self.width * 0.15,  # Match the visual mountain top
+            self.y,  # Top of mountain
+            self.width * 0.7,  # Width of mountain top
+            self.height - self.base_height  # Height excluding base
+        )
+
+    def get_no_spawn_rects(self):
+        """Return both the base hitbox and the top bounding rect"""
+        rects = []
+        base_rect = self.get_hitbox()
+        if base_rect is not None:
+            rects.append(base_rect)
+
+        top_rect = self.get_top_bounding_rect()
+        if top_rect is not None:
+            rects.append(top_rect)
+
+        return rects
+
+class MountainRidge(Obstacle):
+    def __init__(self, x, y, variations, block_size=20):
+        super().__init__(x, y, variations, block_size)
+        self.width = variations['size'] * block_size * 4  # Extra wide
+        self.height = variations['size'] * block_size * 2
+        self.can_be_destroyed = False  # Mountains can't be destroyed
+        
+        # Generate multiple connected peaks
+        self.ridge_points = []
+        num_peaks = 4
+        base_y = self.y + self.height
+        
+        # Create points for multiple peaks
+        points_per_peak = 6
+        for i in range(num_peaks * points_per_peak + 1):
+            x_pos = self.x + (i * self.width / (num_peaks * points_per_peak))
+            
+            if i == 0 or i == num_peaks * points_per_peak:  # Endpoints
+                y_pos = base_y
+            else:
+                # Create repeating peaks
+                peak_position = (i % points_per_peak) / points_per_peak
+                height_factor = 1 - abs(peak_position - 0.5) * 2
+                # Vary peak heights
+                max_height = self.height * (0.7 + 0.3 * (math.sin(i/points_per_peak)))
+                y_pos = base_y - max_height * height_factor
+                # Add roughness
+                y_pos += random.randint(-10, 10)
+            
+            self.ridge_points.append((x_pos, y_pos))
+        
+        # Generate snow patches
+        self.snow_patches = []
+        snow_line = self.y + self.height * 0.6  # Snow on upper 40%
+        for x, y in self.ridge_points:
+            if y < snow_line:
+                num_patches = int((snow_line - y) / 15)
+                for _ in range(num_patches):
+                    patch_x = x + random.randint(-15, 15)
+                    patch_y = y + random.randint(0, int(snow_line - y))
+                    self.snow_patches.append((patch_x, patch_y))
+
+class Cloud(Obstacle):
+    def __init__(self, x, y, variations, block_size=20):
+        super().__init__(x, y, variations, block_size)
+        self.width = variations.get('width', 4) * block_size
+        self.height = variations.get('height', 3) * block_size
+        self.pixel_size = 4
+        self.pixels = self._generate_pixels()
+        self.can_be_destroyed = False  # Clouds can't be destroyed
+        
+    def _generate_pixels(self):
+        # Create a more blocky cloud shape using a pixel map
+        pixels = []
+        width = self.width // self.pixel_size
+        height = self.height // self.pixel_size
+        
+        # Define cloud shape using 1s and 0s (1 = cloud, 0 = empty)
+        shape = [
+            [0,0,1,1,1,1,0,0],
+            [0,1,1,1,1,1,1,0],
+            [1,1,1,1,1,1,1,1],
+            [0,1,1,1,1,1,1,0],
+            [0,0,1,1,1,1,0,0],
+        ]
+        
+        # Scale up the shape to match our dimensions
+        scale_x = width // len(shape[0])
+        scale_y = height // len(shape)
+        
+        for y, row in enumerate(shape):
+            for x, cell in enumerate(row):
+                if cell == 1:
+                    # Scale up each pixel
+                    for sy in range(scale_y):
+                        for sx in range(scale_x):
+                            pixels.append((
+                                x * scale_x + sx,
+                                y * scale_y + sy
+                            ))
+        
+        return pixels
+    
+    def draw_normal(self, surface):
+        cloud_color = (255, 255, 255)  # White clouds
+        
+        # Draw each pixel of the cloud
+        for px, py in self.pixels:
+            pygame.draw.rect(
+                surface,
+                cloud_color,
+                (
+                    self.x + px * self.pixel_size,
+                    self.y + py * self.pixel_size,
+                    self.pixel_size,
+                    self.pixel_size
+                )
+            )
+    
+    def get_hitbox(self):
+        # Return a rectangular hitbox for the cloud
+        return pygame.Rect(self.x, self.y, self.width, self.height)
+    
+    def get_no_spawn_rects(self):
+        # Return both the base hitbox and a buffer zone around the cloud
+        hitbox = self.get_hitbox()
+        buffer = 20  # Buffer zone size
+        spawn_rect = pygame.Rect(
+            hitbox.x - buffer,
+            hitbox.y - buffer,
+            hitbox.width + buffer * 2,
+            hitbox.height + buffer * 2
+        )
+        return [spawn_rect]
+
+__all__ = ['Obstacle', 'Cactus', 'Tree', 'Bush', 'Pond', 'Building', 'Park', 'Lake', 'Rubble', 'MountainPeak', 'MountainRidge', 'River', 'Cloud'] 
+
+class River(Obstacle):
+    def __init__(self, x, y, variations, block_size=20):
+        super().__init__(x, y, variations, block_size)
+        self.width = variations['width']
+        self.length = variations['length']
+        self.direction = variations['direction']
+        self.source_mountain = None  # NEW: Track the source mountain
+        self.drying_up = False      # NEW: Track drying state
+        self.dry_timer = 0          # NEW: Timer for drying animation
+        self.dry_duration = 30      # Faster drying animation (was 60)
+        self.can_be_destroyed = False  # Make rivers indestructible like ponds
+        
+        # Create river path points
+        self.points = self._generate_river_path()
+
+    # Add new method for drying animation
+    def start_drying(self):
+        """Start the drying up animation"""
+        self.drying_up = True
+        self.dry_timer = 0
+    
+    # Modify draw_normal to handle drying animation
+    def draw_normal(self, surface):
+        if self.drying_up:
+            # Calculate fade based on dry_timer
+            fade_progress = self.dry_timer / self.dry_duration
+            base_alpha = int(255 * (1 - fade_progress))
+            
+            # Create a surface for the fading river
+            river_surface = pygame.Surface((self.game.width, self.game.height), pygame.SRCALPHA)
+            
+            # Draw the river to this surface
+            self._draw_river_body(river_surface, base_alpha)
+            
+            # Blit the fading river to the main surface
+            surface.blit(river_surface, (0, 0))
+        else:
+            # Normal drawing
+            self._draw_river_body(surface)
+    
+    # Move existing river drawing code to new method
+    def _draw_river_body(self, surface, alpha=255):
+        """Draw the river body with optional alpha"""
+        pixel_size = 4  # Define pixel_size at the start of the method
+        
+        # Draw water first
+        water_colors = [
+            (65, 105, 225, alpha),   # Royal blue
+            (30, 144, 255, alpha),   # Dodger blue
+            (135, 206, 235, alpha),  # Sky blue
+        ]
+        
+        # Draw water layers
+        for layer, color in enumerate(reversed(water_colors)):
+            shrink = layer * 2
+            for i in range(len(self.points) - 1):
+                start = self.points[i]
+                end = self.points[i + 1]
+                
+                left = min(start[0], end[0]) - self.width//2 + shrink
+                right = max(start[0], end[0]) + self.width//2 + shrink
+                top = min(start[1], end[1]) - self.width//2 + shrink
+                bottom = max(start[1], end[1]) + self.width//2 + shrink
+                
+                for px in range(int(left), int(right), pixel_size):
+                    for py in range(int(top), int(bottom), pixel_size):
+                        if not self._is_point_in_river(px, py, start, end):
+                            continue
+                        
+                        # Increase edge pixelation effect for better blending
+                        if self._is_edge_pixel(px, py, left, right, top, bottom, pixel_size) and random.random() > 0.5:
+                            continue
+                        pygame.draw.rect(surface, color, [px, py, pixel_size, pixel_size])
+    
+    def _generate_river_path(self):
+        """Generate a river path with right-angle turns"""
+        points = [(self.x, self.y)]  # Use self.x and self.y instead of origin_x/y
+        current_x = self.x
+        current_y = self.y
+        
+        remaining_length = self.length
+        going_down = True  # Track if we're moving vertically or horizontally
+        
+        while remaining_length > 0:
+            if going_down:
+                # Move down a fixed amount
+                move_length = min(remaining_length, random.randint(40, 60))
+                next_x = current_x
+                next_y = current_y + move_length
+                
+                # Always turn after moving down
+                going_down = False
+            else:
+                # Move horizontally by a fixed amount
+                move_length = min(remaining_length, random.randint(30, 50))
+                next_x = current_x + (self.direction * move_length)  # Use self.direction instead of main_direction
+                next_y = current_y
+                
+                # 30% chance to create a fork when moving horizontally
+                if random.random() < 0.3 and remaining_length > self.length * 0.4:
+                    fork_points = self._generate_fork(current_x, current_y, -self.direction)  # Use self.direction
+                    points.extend(fork_points)
+                
+                # Always go back to moving down
+                going_down = True
+            
+            points.append((next_x, next_y))
+            current_x = next_x
+            current_y = next_y
+            remaining_length -= move_length
+        
+        return points
+    
+    def _generate_fork(self, start_x, start_y, direction):
+        """Generate a forked path with right angles"""
+        points = []
+        
+        # Move horizontally first
+        fork_length = random.randint(20, 30)
+        next_x = start_x + (direction * fork_length)
+        points.append((next_x, start_y))
+        
+        # Then move down
+        down_length = random.randint(30, 40)
+        points.append((next_x, start_y + down_length))
+        
+        return points
+    
+    def get_hitbox(self):
+        """Return a series of rectangles for the river's path"""
+        hitboxes = []
+        
+        for i in range(len(self.points) - 1):
+            start = self.points[i]
+            end = self.points[i + 1]
+            
+            # Create a rectangle for this segment
+            left = min(start[0], end[0]) - self.width//2
+            right = max(start[0], end[0]) + self.width//2
+            top = min(start[1], end[1])
+            bottom = max(start[1], end[1])
+            
+            hitboxes.append(pygame.Rect(
+                left, top, right - left, bottom - top
+            ))
+        
+        return hitboxes
+    
+    def get_no_spawn_rects(self):
+        """Return hitboxes plus some buffer zone"""
+        base_hitboxes = self.get_hitbox()
+        buffer_hitboxes = []
+        
+        for hitbox in base_hitboxes:
+            # Add buffer zone around each segment
+            buffer_hitboxes.append(hitbox.inflate(20, 20))
+        
+        return buffer_hitboxes 
+
+    def _is_point_in_river(self, px, py, start, end):
+        """Check if a point is within the river segment including corners"""
+        # For vertical segments
+        if abs(end[1] - start[1]) > abs(end[0] - start[0]):
+            # Check if point is within width of the segment
+            return abs(px - start[0]) <= self.width//2
+        # For horizontal segments
+        else:
+            # Check if point is within width of the segment
+            return abs(py - start[1]) <= self.width//2
+    
+    def _is_edge_pixel(self, px, py, left, right, top, bottom, pixel_size):
+        """Check if a pixel is on the edge of the river"""
+        edge_margin = pixel_size * 2
+        return (px <= left + edge_margin or 
+                px >= right - edge_margin or
+                py <= top + edge_margin or 
+                py >= bottom - edge_margin)

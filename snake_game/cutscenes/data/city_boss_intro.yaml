@@ -21,26 +21,23 @@ sequence:
       - ["snake_god_appear", true]
 
   - type: dialogue
-    text: "You have become fat and strong." 
+    text: "You have laid waste to the city, my child."
     focus: "snake_god"
 
   - type: dialogue
-    text: "It may not appear so, but this is a trick of perspective." 
+    text: "But something stirs in the ruins..."
 
   - type: dialogue
-    text: "Your body is the width of a tree. You are as a wicked python." 
+    text: "A great machine approaches - a mechanical beast devised to destroy you."
 
   - type: dialogue
-    text: "You may now feast upon the beasts of the forest."
+    text: "I shall grant you a new power." 
 
   - type: dialogue
-    text: "Devour five of the creatures in a row and you will course with crackling energy."
+    text: "Your venom now crackles with energy. When you have fed at least once, press Space to unleash it upon your foe."
 
   - type: dialogue
-    text: "This power will allow you to destroy a single obstacle with your might."
+    text: "But take care: It will cost you a segment of your body."
 
   - type: dialogue
-    text: "But take care around water. It will discharge your power."
-
-  - type: dialogue
-    text: "Now go. The forest is your demesne."
+    text: "Now, go! Show them what you've become."
